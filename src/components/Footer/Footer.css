@@ -1,0 +1,27 @@
+.app-footer {
+    flex: initial;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    min-height: 60px;
+    background-size: auto 60px;
+    text-shadow: #000 1px 0 5px;
+    transition-property: background-image, color, text-shadow;
+    transition-duration: 1s;
+}
+
+.light .app-footer {
+    background-image: url('ground-grass-dirt-tile.png');
+    color: yellow;
+    text-shadow: #000 1px 0 5px;
+}
+
+.dark .app-footer {
+    background-image: url('ground-stone-gray-tile.png');
+    color: white;
+    text-shadow: red 1px 0 5px;
+}
+
+.app-footer .content {
+    padding-bottom: 5px;
+}

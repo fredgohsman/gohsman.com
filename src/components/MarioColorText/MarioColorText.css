@@ -1,0 +1,28 @@
+.mario-color-text {
+    font-family: SuperMario256;
+}
+
+.light .mario-color-text-0 {
+    color: rgb(224, 1, 1);
+}
+
+.light .mario-color-text-1 {
+    color: rgb(13, 243, 13);
+}
+
+.light .mario-color-text-2 {
+    color: gold;
+}
+
+.light .mario-color-text-3 {
+    color: #00a2ff;
+}
+
+.light .mario-color-text-4 {
+    color: rgb(255, 97, 242);
+}
+
+.mario-color-text-0, .mario-color-text-1, .mario-color-text-2, .mario-color-text-3, .mario-color-text-4 {
+    transition-property: color;
+    transition-duration: 1s;
+}

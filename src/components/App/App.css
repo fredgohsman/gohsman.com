@@ -1,0 +1,16 @@
+.app {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    transition-property: background-color, color;
+    transition-duration: 1s;
+}
+
+.dark .app {
+    background-color: #999;
+}
+
+.light .app {
+    background-color: #a0d8ff;
+}

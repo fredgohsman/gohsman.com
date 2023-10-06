@@ -1,0 +1,38 @@
+.app-header {
+    flex: initial;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: calc(16px + 2vmin);
+    min-height: 75px;
+    text-shadow: #000 1px 0 5px;
+    transition-property: background-color, color;
+    transition-duration: 1s;
+}
+
+.dark .app-header {
+    background-color: #282c34;
+    color: white;
+}
+
+.light .app-header {
+    background-color: #199af5;
+    color: white;
+}
+
+.app-header-left {
+    width: 75px;
+}
+
+.app-header-center {
+    flex: 1;
+    text-align: center;
+}
+
+.app-header-right {
+    width: 75px;
+}
+
+.light .app-header-right {
+    color: gold;
+}

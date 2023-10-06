@@ -1,0 +1,46 @@
+.theme-toggle {
+    margin-top: 1.5rem;
+    display: inline-block;
+    cursor: pointer;
+    border-radius: 9999px;
+    --tw-bg-opacity: 1;
+    background-color: rgb(243 244 246 / var(--tw-bg-opacity));
+    padding-left: 1rem;
+    padding-right: 1rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+    text-align: center;
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter, -webkit-backdrop-filter;
+    transition-duration: 1s;
+    /* transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); */
+}
+
+.switch-light {
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-smoothing: antialiased;
+    display: inline-block;
+    font-style: normal;
+    font-variant: normal;
+    text-rendering: auto;
+    font-family: 'Line Awesome Free';
+    font-weight: 900;
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+    --tw-text-opacity: 1;
+    color: rgb(156 163 175 / var(--tw-text-opacity));
+}
+
+.switch-dark {
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-smoothing: antialiased;
+    display: inline-block;
+    font-style: normal;
+    font-variant: normal;
+    text-rendering: auto;
+    font-family: 'Line Awesome Free';
+    font-weight: 900;
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+    --tw-text-opacity: 1;
+    color: rgb(107 114 128 / var(--tw-text-opacity));
+}
