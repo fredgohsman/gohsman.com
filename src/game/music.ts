@@ -250,8 +250,9 @@ export const music = {
         // Fade out anything still ringing from the previous track, then start on a fresh output.
         fadeOut(ctx)
         master = ctx.createGain()
+        // Start at the right volume straight away, so a muted switch never blips.
+        master.gain.value = sound.isMuted() ? 0 : MUSIC_VOLUME
         master.connect(ctx.destination)
-        applyMute(sound.isMuted())
 
         currentTrack = track
         tempo = speed
@@ -280,6 +281,14 @@ export const music = {
 
     isPlaying: () => currentTrack !== null,
 }
+
+// While developing, hot reloading can load this file again while the old copy keeps playing
+// (and the mute button only reaches the new copy). Leave a handle on window so each new copy
+// silences the one before it.
+const HANDLE = '__fredMusicStop'
+const previousStop = (window as any)[HANDLE]
+if (typeof previousStop === 'function') previousStop()
+;(window as any)[HANDLE] = () => music.stop()
 
 // How many steps each part of a song has; every part should match so the loop stays in sync.
 export function partLengths(track: Track): number[] {
