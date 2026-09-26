@@ -33,6 +33,7 @@ export const GameCanvas = ({ started }: IProps) => {
     const [runEnd, setRunEnd] = useState<RunEnd | null>(null)
     const [foundProjects, setFoundProjects] = useState<number[]>([])
     const [touch] = useState(isTouchDevice)
+    const [running, setRunning] = useState(false)
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -99,7 +100,9 @@ export const GameCanvas = ({ started }: IProps) => {
     return (
         <div className="game-canvas">
             <canvas ref={canvasRef} aria-hidden="true" />
-            {started && touch && !panel && !runEnd && <TouchControls onControl={onControl} />}
+            {started && touch && !panel && !runEnd && (
+                <TouchControls onControl={onControl} running={running} onToggleRun={() => setRunning((r) => !r)} />
+            )}
             {panel && (
                 <InfoPanel
                     section={panel.section}
