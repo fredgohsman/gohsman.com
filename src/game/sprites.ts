@@ -138,10 +138,10 @@ function px(ctx: Ctx, color: string, x: number, y: number, w = 1, h = 1) {
     ctx.fillRect(x, y, w, h)
 }
 
-// Pads rows to 16 wide, and adds empty rows on top so the art sits on the bottom edge.
-function grid(rows: string[], height = TILE): string[] {
-    const padded = rows.map((row) => row.padEnd(TILE, '.').slice(0, TILE))
-    while (padded.length < height) padded.unshift('.'.repeat(TILE))
+// Pads rows to a fixed width (16 by default), and adds empty rows on top so the art sits on the bottom edge.
+function grid(rows: string[], height = TILE, width = TILE): string[] {
+    const padded = rows.map((row) => row.padEnd(width, '.').slice(0, width))
+    while (padded.length < height) padded.unshift('.'.repeat(width))
     return padded
 }
 
@@ -193,9 +193,10 @@ function polish(ctx: Ctx, width: number, height: number) {
 
 // A polished sprite from a letter grid.
 function sprite(rows: string[], colors: Record<string, string>, flip = false): Canvas {
-    return makeCanvas(TILE, rows.length, (ctx) => {
+    const width = rows[0].length
+    return makeCanvas(width, rows.length, (ctx) => {
         paintGrid(ctx, rows, colors, flip)
-        polish(ctx, TILE, rows.length)
+        polish(ctx, width, rows.length)
     })
 }
 
@@ -228,7 +229,7 @@ const LEGS_WALK1 = ['....JJJJJJJ.....', '...JJJ...JJJ....', '..JJ.......JJ...', 
 const LEGS_WALK2 = ['....JJJJJJJ.....', '.....JJJJJ......', '.....JJ.JJ......', '.....OO.OOO.....']
 const LEGS_JUMP = ['....JJJJJJJ.....', '...JJJ...JJJ....', '..OJJ.....JJO...', '..OO.......OO...']
 
-// Tall Fred, after eating a power apple: 16x32.
+// Tall Fred, after a cup of coffee: 16x32.
 const BIG_HEAD = [
     '................',
     '.....HHHHHH.....',
@@ -334,72 +335,172 @@ const BIG_FRAMES: Record<PlayerFrame, string[]> = {
 
 // ---- Enemies and items ---------------------------------------------------------
 
-const BLOB_COLORS: Record<string, string> = {
-    D: '#1e5a14', // rim
-    G: '#5cc02e', // body
-    L: '#b4f07a', // shine
-    W: '#ffffff',
-    K: '#101010',
+const BUG_COLORS: Record<string, string> = {
+    C: '#1a1a22', // chip casing
+    c: '#3a3a48', // casing face
+    R: '#ff3030', // LED eyes
+    W: '#ffd8d8', // LED glint
+    g: '#d8b040', // gold contacts
+    L: '#c8c8d8', // silver pin legs
 }
 
-// A grumpy slime. Stomp it.
-const BLOB_TOP = [
-    '.....DDDDDD.....',
-    '...DDGGGGGGDD...',
-    '..DGGLLGGGGGGD..',
-    '.DGGLGGGGGGGGGD.',
-    '.DGKKGGGGGGKKGD.',
-    'DGGWKKGGGGKKWGGD',
-    'DGGWWKGGGGKWWGGD',
-    'DGGGGGGGGGGGGGGD',
-    'DGGGGGKKKKGGGGGD',
-    'DGGGGKGGGGKGGGGD',
+// A software bug: a little circuit chip scuttling on its pins. Stomp it.
+const BUG_BODY = [
+    '..L.L.L.L.L.L...',
+    '.CCCCCCCCCCCCC..',
+    '.CcccccccccccC..',
+    '.CcRRcccccRRcC..',
+    '.CcRWcccccRWcC..',
+    '.CcccccccccccC..',
+    '.CcccgggggcccC..',
+    '.CcccccccccccC..',
+    '.CCCCCCCCCCCCC..',
 ]
-const BLOB_1 = grid([...BLOB_TOP, 'DGGGGGGGGGGGGGGD', '.DDGGDDGGDDGGDD.', '...DD..DD..DD...'])
-const BLOB_2 = grid([...BLOB_TOP, 'DGGGGGGGGGGGGGGD', '.DGGDDGGDDGGDDD.', '..DD..DD..DD....'])
-const BLOB_FLAT = grid(['..DDDDDDDDDDDD..', '.DGKKGGGGGGKKGD.', 'DGGGGGKKKKGGGGGD', '.DDDDDDDDDDDDDD.'])
+const BUG_1 = grid([...BUG_BODY, '..L.L.L.L.L.L...', '.L.L.L.L.L.L....'])
+const BUG_2 = grid([...BUG_BODY, '..L.L.L.L.L.L...', '...L.L.L.L.L.L..'])
+const BUG_FLAT = grid(['.CCCCCCCCCCCCC..', '.CcRRcccccRRcC..', '.CCCCCCCCCCCCC..', '.LLLLLLLLLLLLL..'])
 
-const SPIKY_COLORS: Record<string, string> = {
-    S: '#d8d8e8', // spikes
-    T: '#7a7a94', // spike shadow
-    B: '#8a5a2a', // body
-    F: '#e8b888', // face
-    K: '#101010',
-    N: '#e0302a', // nose
+const SHREDDER_COLORS: Record<string, string> = {
+    V: '#e0e0ec', // blades
+    D: '#20202a', // slot
+    G: '#6a6a78', // casing
+    g: '#8a8a9a', // casing face
+    R: '#ff4040', // angry lights
+    K: '#101014', // mouth slot
+    P: '#ffffff', // shredded paper
+    k: '#2a2a30', // wheels
 }
 
-// A hedgehog with a back full of spikes. Don't stomp it.
-const SPIKY_TOP = [
-    '...S..S..S......',
-    '..SST.SST.SS....',
-    '.SSTSSTSSTSST...',
-    'SSTSSTSSTSSTFF..',
-    'STSSTSSTSSTFFFF.',
-    'SSTSSTSSTSFFKFF.',
-    'STSSTSSTSSFFFFFN',
-    'BBBBBBBBBBFFFFF.',
-    '.BBBBBBBBBBFFF..',
+// A paper shredder with blades on top. Don't stomp it.
+const SHREDDER_BODY = [
+    '.V.V.V.V.V.V.V..',
+    'VVVVVVVVVVVVVVV.',
+    'DDDDDDDDDDDDDDD.',
+    'GGGGGGGGGGGGGGG.',
+    'GgggggggggggggG.',
+    'GgRRgggggggRRgG.',
+    'GggggKKKKKggggG.',
+    'GgggggggggggggG.',
+    'GgPgPgPgPgPgPgG.',
+    'GGGGGGGGGGGGGGG.',
+    '.PP.PP.PP.PP.P..',
 ]
-const SPIKY_1 = grid([...SPIKY_TOP, '..BBBBBBBBBB....', '..KK......KK....'])
-const SPIKY_2 = grid([...SPIKY_TOP, '..BBBBBBBBBB....', '....KK..KK......'])
+const SHREDDER_1 = grid([...SHREDDER_BODY, '.kk........kk...'])
+const SHREDDER_2 = grid([...SHREDDER_BODY, '..kk......kk....'])
 
-// The power apple: eat it to grow tall and break bricks.
-const APPLE = grid([
-    '.......L........',
-    '......LLG.......',
-    '.......kGG......',
-    '....RRRkRRR.....',
-    '...RRRRRRRRR....',
-    '..RRWWRRRRRRR...',
-    '..RWWRRRRRRRR...',
-    '..RRRRRRRRRRR...',
-    '..RRRRRRRRRRR...',
-    '..RRRRRRRRRRR...',
-    '...RRRRRRRRR....',
-    '....RRRRRRR.....',
-    '.....RR.RR......',
+// The power-up: a cup of coffee. Drink it to grow tall and break bricks.
+const COFFEE = grid([
+    '.....s...s......',
+    '......s...s.....',
+    '.....s...s......',
+    '...WWWWWWWWW....',
+    '...WbbbbbbbW....',
+    '...WWWWWWWWWWW..',
+    '...WWWWWWWWW..W.',
+    '...WWWRRWWWW..W.',
+    '...WWRRRRWWW..W.',
+    '...WWWRRWWWWWW..',
+    '...WWWWWWWWW....',
+    '....WWWWWWW.....',
 ])
-const APPLE_COLORS: Record<string, string> = { R: '#e0302a', W: '#ffd0c8', k: '#6a3a14', G: '#3cb043', L: '#7ae05a' }
+const COFFEE_COLORS: Record<string, string> = { W: '#f4f4f8', b: '#5a3418', R: '#d02828', s: '#c8d0e0' }
+
+// ---- The boss: "The Manager" (24x44) -----------------------------------------
+
+const BOSS_COLORS: Record<string, string> = {
+    H: '#3a2a1a', // slicked-back hair
+    S: '#f0c8a0', // skin
+    G: '#202020', // glasses frames
+    g: '#bfe3ff', // lenses
+    K: '#7a3a2a', // smug mouth
+    W: '#e4ecf8', // dress shirt
+    R: '#d01818', // bow tie
+    r: '#8a0a0a', // bow tie knot
+    B: '#3a2a1a', // belt
+    Y: '#e8c040', // buckle
+    T: '#c8b078', // khakis
+    P: '#0c0c10', // patent leather shoes
+    w: '#ffffff', // shoe shine
+}
+
+const BOSS_HEAD = [
+    '........HHHHHHH.........',
+    '......HHHHHHHHHHH.......',
+    '.....HHHHHHHHHHHHH......',
+    '.....HHSSSSSSSSSHH......',
+    '.....HSSSSSSSSSSSH......',
+    '.....SSGGGGSGGGGSS......',
+    '....SSSGggGSGggGSS......',
+    '....SSSGGGGSGGGGSS......',
+    '.....SSSSSSSSSSSSS......',
+    '.....SSSSSSSSSSSSS......',
+    '......SSSKKKKSSSS.......',
+    '.......SSSSSSSSS........',
+    '........SSSSSSS.........',
+]
+const BOSS_COLLAR = [
+    '......WWWWSSSWWWW.......',
+    '....WWWWWRRrRRWWWWW.....',
+    '....WWWWWRRrRRWWWWW.....',
+    '....WWWWWWWWWWWWWWW.....',
+]
+const BOSS_ARMS = [
+    '...WWWWWWWWWWWWWWWWWW...',
+    '..WWWWWWWWWWWWWWWWWWWW..',
+    '..WWW.WWWWWWWWWWWW.WWW..',
+    '..WWW.WWWWWWWWWWWW.WWW..',
+    '..WWW.WWWWWWWWWWWW.WWW..',
+    '..SSS.WWWWWWWWWWWW.SSS..',
+    '..SSS.WWWWWWWWWWWW.SSS..',
+]
+// Arm out front, holding the stapler (the stapler itself is drawn separately).
+const BOSS_ARMS_AIM = [
+    '...WWWWWWWWWWWWWWWWWWWW.',
+    '..WWWWWWWWWWWWWWWWWWWWSS',
+    '..WWW.WWWWWWWWWWWW....SS',
+    '..WWW.WWWWWWWWWWWW......',
+    '..WWW.WWWWWWWWWWWW......',
+    '..SSS.WWWWWWWWWWWW......',
+    '..SSS.WWWWWWWWWWWW......',
+]
+const BOSS_WAIST = [
+    '......BBBBBYYBBBBB......',
+    '......TTTTTTTTTTTT......',
+    '......TTTTTTTTTTTT......',
+    '......TTTTTTTTTTTT......',
+]
+const BOSS_LEGS_STAND = [
+    ...Array(10).fill('......TTTTT..TTTTT......'),
+    '.....PPPPPP..PPPPPPP....',
+    '.....PwPPPP..PwPPPPPP...',
+    '.....PPPPPP..PPPPPPPP...',
+]
+const BOSS_LEGS_WALK = [
+    '.....TTTTT....TTTTT.....',
+    '.....TTTT......TTTT.....',
+    '....TTTT........TTTT....',
+    '....TTTT........TTTT....',
+    '...TTTT..........TTTT...',
+    '...TTTT..........TTTT...',
+    '...TTTT..........TTTT...',
+    '..TTTT............TTTT..',
+    '..TTTT............TTTT..',
+    '..TTTT............TTTT..',
+    '.PPPPP............PPPPPP',
+    '.PwPPP............PwPPPP',
+    '.PPPPP............PPPPPP',
+]
+
+export type BossFrame = 'stand' | 'walk' | 'aim'
+
+const BOSS_FRAMES: Record<BossFrame, string[]> = {
+    stand: grid([...BOSS_HEAD, ...BOSS_COLLAR, ...BOSS_ARMS, ...BOSS_WAIST, ...BOSS_LEGS_STAND], 44, 24),
+    walk: grid([...BOSS_HEAD, ...BOSS_COLLAR, ...BOSS_ARMS, ...BOSS_WAIST, ...BOSS_LEGS_WALK], 44, 24),
+    aim: grid([...BOSS_HEAD, ...BOSS_COLLAR, ...BOSS_ARMS_AIM, ...BOSS_WAIST, ...BOSS_LEGS_STAND], 44, 24),
+}
+
+const STAPLER = grid(['.TTTTTTTTTT.', 'TttttttttttT', 'TTTTTTTTTTTT', '..TT....TT..', '.TTTTTTTTTTT'], 5, 12)
+const STAPLER_COLORS: Record<string, string> = { T: '#2a2a32', t: '#b8b8c8' }
 
 const COIN = grid([
     '......DDDD......',
@@ -568,6 +669,19 @@ function paintGround(ctx: Ctx, p: Palette, top: boolean, theme: Theme) {
     }
 }
 
+function paintOfficeFloor(ctx: Ctx, top: boolean, theme: Theme) {
+    const carpet = theme === 'dark' ? '#3a4058' : '#6a7aa0'
+    const base = theme === 'dark' ? '#2a2a34' : '#8a8a94'
+    px(ctx, top ? carpet : base, 0, 0, TILE, TILE)
+    const next = random(top ? 3 : 5)
+    for (let i = 0; i < 10; i++) px(ctx, shade(top ? carpet : base, next() > 0.5 ? 0.15 : -0.15), Math.floor(next() * TILE), Math.floor(next() * TILE))
+    if (top) {
+        // Baseboard trim along the top of the carpet.
+        px(ctx, shade(carpet, 0.35), 0, 0, TILE, 1)
+        px(ctx, shade(carpet, -0.3), 0, 1, TILE, 1)
+    }
+}
+
 // Pipes are shaded across their width like a cylinder: highlight left of centre, dark at the edges.
 const PIPE_RAMP = [-0.55, -0.1, 0.25, 0.5, 0.35, 0.15, 0.05, 0, 0, -0.05, -0.1, -0.15, -0.2, -0.25, -0.3, -0.35]
 
@@ -607,10 +721,14 @@ export interface Sprites {
     used: Canvas
     pipe: Record<'topL' | 'topR' | 'bodyL' | 'bodyR', Canvas>
     coin: Canvas
-    apple: Canvas
+    coffee: Canvas
+    officeFloor: Canvas
+    officeFloorTop: Canvas
     // Enemy frames face right; `left` versions are mirrored.
-    blob: { walk: [Canvas, Canvas]; flat: Canvas }
-    spiky: { right: [Canvas, Canvas]; left: [Canvas, Canvas] }
+    bug: { walk: [Canvas, Canvas]; flat: Canvas }
+    shredder: { right: [Canvas, Canvas]; left: [Canvas, Canvas] }
+    boss: Record<BossFrame, Facing>
+    stapler: Facing
 }
 
 function facing(rows: string[], colors: Record<string, string>): Facing {
@@ -643,14 +761,22 @@ export function buildSprites(theme: Theme): Sprites {
             bodyR: tile((ctx) => paintPipe(ctx, p, 'bodyR')),
         },
         coin: tile((ctx) => paintGrid(ctx, COIN, COIN_COLORS)),
-        apple: sprite(APPLE, APPLE_COLORS),
-        blob: {
-            walk: [sprite(BLOB_1, BLOB_COLORS), sprite(BLOB_2, BLOB_COLORS)],
-            flat: sprite(BLOB_FLAT, BLOB_COLORS),
+        coffee: sprite(COFFEE, COFFEE_COLORS),
+        officeFloor: tile((ctx) => paintOfficeFloor(ctx, false, theme)),
+        officeFloorTop: tile((ctx) => paintOfficeFloor(ctx, true, theme)),
+        bug: {
+            walk: [sprite(BUG_1, BUG_COLORS), sprite(BUG_2, BUG_COLORS)],
+            flat: sprite(BUG_FLAT, BUG_COLORS),
         },
-        spiky: {
-            right: [sprite(SPIKY_1, SPIKY_COLORS), sprite(SPIKY_2, SPIKY_COLORS)],
-            left: [sprite(SPIKY_1, SPIKY_COLORS, true), sprite(SPIKY_2, SPIKY_COLORS, true)],
+        shredder: {
+            right: [sprite(SHREDDER_1, SHREDDER_COLORS), sprite(SHREDDER_2, SHREDDER_COLORS)],
+            left: [sprite(SHREDDER_1, SHREDDER_COLORS, true), sprite(SHREDDER_2, SHREDDER_COLORS, true)],
         },
+        boss: {
+            stand: facing(BOSS_FRAMES.stand, BOSS_COLORS),
+            walk: facing(BOSS_FRAMES.walk, BOSS_COLORS),
+            aim: facing(BOSS_FRAMES.aim, BOSS_COLORS),
+        },
+        stapler: facing(STAPLER, STAPLER_COLORS),
     }
 }

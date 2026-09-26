@@ -24,6 +24,31 @@ const isTouchDevice = () =>
     typeof window !== 'undefined' &&
     (('ontouchstart' in window && navigator.maxTouchPoints > 0) || window.matchMedia?.('(pointer: coarse)').matches)
 
+// What to show when a World 1-2 or 1-3 run ends.
+function runEndMessage(end: RunEnd, goToLevel: (id: LevelId) => void) {
+    const stats = [`Score ${end.score}`, `Coins ${end.coins}`]
+    const home = { label: 'Back to 1-1', onClick: () => goToLevel(1) }
+    if (end.outcome === 'gameover') {
+        return { title: 'Game Over', lines: stats, actions: [{ label: 'Try again', onClick: () => goToLevel(end.level) }, home] }
+    }
+    if (end.level === 3) {
+        return {
+            title: 'Promoted!',
+            lines: ['You beat The Manager.', ...stats],
+            actions: [{ label: 'Fight again', onClick: () => goToLevel(3) }, home],
+        }
+    }
+    return {
+        title: 'Course Clear!',
+        lines: stats,
+        actions: [
+            { label: 'Boss Fight →', onClick: () => goToLevel(3) },
+            { label: 'Play again', onClick: () => goToLevel(2) },
+            home,
+        ],
+    }
+}
+
 // Runs the game on a canvas and shows the site's panels when the game asks for them.
 export const GameCanvas = ({ started }: IProps) => {
     const { theme } = useContext(ThemeContext)
@@ -112,16 +137,7 @@ export const GameCanvas = ({ started }: IProps) => {
                     onNextLevel={() => goToLevel(2)}
                 />
             )}
-            {runEnd && (
-                <GameMessage
-                    title={runEnd.outcome === 'clear' ? 'Course Clear!' : 'Game Over'}
-                    lines={[`Score ${runEnd.score}`, `Coins ${runEnd.coins}`]}
-                    actions={[
-                        { label: runEnd.outcome === 'clear' ? 'Play again' : 'Try again', onClick: () => goToLevel(2) },
-                        { label: 'Back to 1-1', onClick: () => goToLevel(1) },
-                    ]}
-                />
-            )}
+            {runEnd && <GameMessage {...runEndMessage(runEnd, goToLevel)} />}
         </div>
     )
 }

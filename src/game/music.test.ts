@@ -6,7 +6,7 @@ test('note names turn into the right pitches', () => {
     expect(frequencyOf('G#4')).toBeCloseTo(415.3, 1)
 })
 
-test.each(['day', 'night'] as const)('every part of the %s tune is the same length', (track) => {
+test.each(['day', 'night', 'bossDay', 'bossNight'] as const)('every part of the %s tune is the same length', (track) => {
     const lengths = partLengths(track)
     expect(new Set(lengths).size).toBe(1)
 })

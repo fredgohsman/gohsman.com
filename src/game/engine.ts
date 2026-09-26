@@ -3,18 +3,20 @@
  *
  * The React wrapper (components/GameCanvas) creates one Game per canvas,
  * and the game calls back into React when a site section should open
- * or when a World 1-2 run ends.
+ * or when a World 1-2 or 1-3 run ends.
  */
 
-import { Decor, EnemyKind, Level, LevelId, ROWS, Section, TILE, buildLevel } from './level'
+import { Decor, EnemyKind, Level, LevelId, ROWS, Section, TILE, buildLevel, isSolid } from './level'
 import { Body, PHYSICS, moveBody, overlappingTiles, overlaps } from './physics'
 import { Sprites, Theme, buildSprites, shade } from './sprites'
 import { sound } from './sound'
-import { music } from './music'
+import { Track, music } from './music'
+import { DEFEAT_LINE, HIT_LINES, OPENING_LINE, TAUNTS } from './taunts'
 
 export type Control = 'left' | 'right' | 'up' | 'down' | 'jump' | 'run'
 
 export interface RunResult {
+    level: LevelId
     score: number
     coins: number
 }
@@ -39,13 +41,40 @@ interface Bump {
 interface Enemy extends Body {
     kind: EnemyKind
     dir: 1 | -1
+    speed: number
+    // Boss-fight bugs run across the room once and vanish at the far wall.
+    crossing: boolean
     mode: 'walk' | 'flat' | 'knocked'
     timer: number
     active: boolean
     dead: boolean
 }
 
-// A power apple sliding along the ground.
+// The Manager, boss of World 1-3.
+interface Boss extends Body {
+    hp: number
+    dir: 1 | -1
+    mode: 'walk' | 'aim' | 'defeated'
+    timer: number
+    // Frames of flashing after being stomped (he can't be hit, or hurt you, meanwhile).
+    hurt: number
+    // Staples left to fire in the current volley.
+    burst: number
+    shootIn: number
+    jumpIn: number
+    tauntIn: number
+    taunt: string
+    tauntFrames: number
+}
+
+interface Staple {
+    x: number
+    y: number
+    vx: number
+    dead: boolean
+}
+
+// A cup of coffee sliding along the ground.
 interface Item extends Body {
     dir: 1 | -1
     // Frames left of rising out of its block.
@@ -87,6 +116,10 @@ const BIG_HEIGHT = 30
 const INVINCIBLE_FRAMES = 120
 // World 1-2 plays the music a little faster.
 const CHALLENGE_TEMPO = 1.12
+const BOSS_HP = 5
+const BOSS_WIDTH = 18
+const BOSS_HEIGHT = 40
+const BUG_SPEED = 1.6
 const ENEMY_SPEED = 0.5
 // The in-game clock ticks once every 24 frames (0.4 seconds), like the old games.
 const TIME_TICK = 24
@@ -149,6 +182,9 @@ export class Game {
     private enemies: Enemy[] = []
     private items: Item[] = []
     private debris: Debris[] = []
+    private boss: Boss | null = null
+    private staples: Staple[] = []
+    private bugTimer = 0
     private popups: Popup[] = []
     private bumps: Bump[] = []
     private coinPops: CoinPop[] = []
@@ -209,7 +245,7 @@ export class Game {
         this.lives = START_LIVES
         this.resetLevel(false)
         this.releaseAll()
-        this.state = this.level.mode === 'challenge' ? 'intro' : 'play'
+        this.state = this.level.mode === 'site' ? 'play' : 'intro'
         this.timer = 0
         if (this.state === 'play') this.startMusic()
         else music.stop()
@@ -238,8 +274,10 @@ export class Game {
         music.switchTrack(this.track())
     }
 
-    private track() {
-        return this.theme === 'dark' ? 'night' : 'day'
+    private track(): Track {
+        const night = this.theme === 'dark'
+        if (this.level.mode === 'boss') return night ? 'bossNight' : 'bossDay'
+        return night ? 'night' : 'day'
     }
 
     private startMusic() {
@@ -312,6 +350,7 @@ export class Game {
                 if (++this.timer >= 150) {
                     this.state = 'play'
                     this.startMusic()
+                    if (this.boss) this.say(OPENING_LINE, 200)
                 }
                 break
             case 'play':
@@ -319,6 +358,8 @@ export class Game {
                 if (this.state === 'play') {
                     this.updateEnemies()
                     this.updateItems()
+                    this.updateBoss()
+                    this.updateStaples()
                 }
                 break
             case 'grow':
@@ -351,7 +392,8 @@ export class Game {
     private updatePlay() {
         const p = this.player
         const c = this.controls
-        const challenge = this.level.mode === 'challenge'
+        // Worlds 1-2 and 1-3 both have enemies, lives and a timer.
+        const challenge = this.level.mode !== 'site'
         const dir = (c.right ? 1 : 0) - (c.left ? 1 : 0)
         const maxSpeed = c.run ? PHYSICS.runSpeed : PHYSICS.walkSpeed
 
@@ -381,6 +423,7 @@ export class Game {
         const bump = moveBody(p, this.level.tiles)
         if (bump) this.bumpTile(bump.col, bump.row)
         if (challenge) this.touchEnemies(prevBottom, jumpDown)
+        if (this.state === 'play') this.touchBoss(prevBottom, jumpDown)
         if (this.state !== 'play') return
 
         if (this.invincible > 0) this.invincible--
@@ -427,14 +470,16 @@ export class Game {
             sound.play('pipe')
         }
 
-        const poleX = this.level.flagCol * TILE + 7
+        const { flagCol } = this.level
+        if (flagCol === undefined) return
+        const poleX = flagCol * TILE + 7
         if (this.flagDone && p.x < poleX - 3 * TILE) {
             // Walked back past the pole: raise the flag so it can be replayed.
             this.flagDone = false
             this.flagY = 3 * TILE
         }
         // Touching the pole or its base block grabs the flag.
-        if (!this.flagDone && p.x + p.w >= this.level.flagCol * TILE - 1) {
+        if (!this.flagDone && p.x + p.w >= flagCol * TILE - 1) {
             this.flagDone = true
             this.state = 'flagSlide'
             if (challenge) {
@@ -458,7 +503,7 @@ export class Game {
         this.flagY = Math.min(this.flagY + 2, baseTop - 12)
         if (p.y >= baseTop - p.h && this.flagY >= baseTop - 12) {
             this.state = 'flagWalk'
-            p.x = this.level.flagCol * TILE + TILE
+            p.x = (this.level.flagCol ?? 0) * TILE + TILE
         }
     }
 
@@ -468,20 +513,24 @@ export class Game {
         p.vy = Math.min(p.vy + PHYSICS.gravity, PHYSICS.maxFall)
         moveBody(p, this.level.tiles)
         this.walkFrame += 0.15
-        const doorX = (this.level.castleCol + 2) * TILE
+        const doorX = ((this.level.castleCol ?? 0) + 2) * TILE
         if (p.x < doorX) return
 
         p.vx = 0
         this.hidden = true
-        if (this.level.mode === 'challenge') {
-            // Time left over turns into points.
-            this.score += this.time * 50
-            this.time = 0
-            this.state = 'panel'
-            this.callbacks.onLevelComplete({ score: this.score, coins: this.coins })
+        if (this.level.mode !== 'site') {
+            this.completeLevel()
         } else {
             this.openSection('contact', undefined, 'castleExit')
         }
+    }
+
+    private completeLevel() {
+        // Time left over turns into points.
+        this.score += this.time * 50
+        this.time = 0
+        this.state = 'panel'
+        this.callbacks.onLevelComplete({ level: this.level.id, score: this.score, coins: this.coins })
     }
 
     private openSection(section: Section, projectIndex: number | undefined, then: ResumeAction) {
@@ -504,6 +553,32 @@ export class Game {
         this.invincible = 0
         this.items = []
         this.debris = []
+        this.staples = []
+        this.bugTimer = 240
+        const { bossCol } = this.level
+        this.boss =
+            bossCol === undefined
+                ? null
+                : {
+                      x: bossCol * TILE,
+                      y: 13 * TILE - BOSS_HEIGHT,
+                      w: BOSS_WIDTH,
+                      h: BOSS_HEIGHT,
+                      vx: 0,
+                      vy: 0,
+                      onGround: true,
+                      hp: BOSS_HP,
+                      dir: -1,
+                      mode: 'walk',
+                      timer: 0,
+                      hurt: 0,
+                      burst: 0,
+                      shootIn: 150,
+                      jumpIn: 240,
+                      tauntIn: 420,
+                      taunt: '',
+                      tauntFrames: 0,
+                  }
         this.lastSafe = { x: this.player.x, y: this.player.y }
         this.facing = 'right'
         this.walkFrame = 0
@@ -528,6 +603,8 @@ export class Game {
                 vy: 0,
                 onGround: false,
                 dir: -1 as const,
+                speed: ENEMY_SPEED,
+                crossing: false,
                 mode: 'walk' as const,
                 timer: 0,
                 active: false,
@@ -584,7 +661,7 @@ export class Game {
         if (this.lives <= 0) {
             this.state = 'panel'
             sound.play('gameover')
-            this.callbacks.onGameOver({ score: this.score, coins: this.coins })
+            this.callbacks.onGameOver({ level: this.level.id, score: this.score, coins: this.coins })
         } else {
             this.resetLevel(this.checkpointReached)
             this.state = 'intro'
@@ -614,11 +691,14 @@ export class Game {
                 e.x += e.vx
                 e.y += e.vy
             } else {
-                e.vx = e.dir * ENEMY_SPEED
+                e.vx = e.dir * e.speed
                 e.vy = Math.min(e.vy + PHYSICS.gravity, PHYSICS.maxFall)
                 moveBody(e, this.level.tiles)
-                // Hit a wall or pipe: turn around.
-                if (e.vx === 0) e.dir = e.dir === 1 ? -1 : 1
+                // Hit a wall or pipe: turn around (or, for a bug crossing the boss room, vanish).
+                if (e.vx === 0) {
+                    if (e.crossing) e.dead = true
+                    e.dir = e.dir === 1 ? -1 : 1
+                }
             }
             if (e.y > ROWS * TILE + 32 || e.x < this.camX - 8 * TILE) e.dead = true
         })
@@ -645,7 +725,7 @@ export class Game {
             if (!e.active || e.mode !== 'walk' || !overlaps(p, e)) continue
             // Landing on top counts as a stomp; touching from the side (or stomping spikes) hurts.
             const stomped = prevBottom <= e.y + 4
-            if (stomped && e.kind === 'blob') {
+            if (stomped && e.kind === 'bug') {
                 e.mode = 'flat'
                 e.timer = 0
                 p.vy = jumpDown ? -6.5 : -4
@@ -658,9 +738,162 @@ export class Game {
         }
     }
 
-    // ---- Power apples and broken bricks -------------------------------------
+    // ---- The boss -----------------------------------------------------------
 
-    private spawnApple(col: number, row: number) {
+    private say(text: string, frames = 180) {
+        if (!this.boss) return
+        this.boss.taunt = text
+        this.boss.tauntFrames = frames
+    }
+
+    private pick<T>(list: T[], avoid?: T): T {
+        const options = list.length > 1 ? list.filter((item) => item !== avoid) : list
+        return options[Math.floor(Math.random() * options.length)]
+    }
+
+    private updateBoss() {
+        const b = this.boss
+        if (!b) return
+        const p = this.player
+        if (b.tauntFrames > 0) b.tauntFrames--
+
+        if (b.mode === 'defeated') {
+            // Falls off the bottom of the screen, then the level ends.
+            b.vy += 0.25
+            b.y += b.vy
+            if (++b.timer === 210) this.completeLevel()
+            return
+        }
+
+        // He gets faster and angrier with every hit.
+        const anger = 1 + (BOSS_HP - b.hp) * 0.18
+        if (b.hurt > 0) b.hurt--
+
+        if (--b.tauntIn <= 0) {
+            this.say(this.pick(TAUNTS, b.taunt))
+            b.tauntIn = 420 + Math.random() * 300
+        }
+
+        if (b.mode === 'walk') {
+            b.vx = b.dir * 0.7 * anger
+            if (Math.random() < 0.004) b.dir = b.dir === 1 ? -1 : 1
+            if (b.onGround && --b.jumpIn <= 0) {
+                b.vy = -6
+                b.jumpIn = 150 + Math.random() * 150
+            }
+            if (--b.shootIn <= 0) {
+                b.mode = 'aim'
+                b.timer = 36
+                b.burst = b.hp <= 2 ? 3 : b.hp <= 4 ? 2 : 1
+            }
+        } else {
+            // Stop, turn to face the player, and fire a volley of staples.
+            b.vx = 0
+            b.dir = p.x + p.w / 2 < b.x + b.w / 2 ? -1 : 1
+            if (--b.timer <= 0) {
+                this.fireStaple(b)
+                b.burst--
+                if (b.burst > 0) b.timer = 16
+                else {
+                    b.mode = 'walk'
+                    b.shootIn = (100 + Math.random() * 80) / anger
+                }
+            }
+        }
+
+        b.vy = Math.min(b.vy + PHYSICS.gravity, PHYSICS.maxFall)
+        moveBody(b, this.level.tiles)
+        if (b.mode === 'walk' && b.vx === 0) b.dir = b.dir === 1 ? -1 : 1
+
+        // Every so often a bug scuttles across the room.
+        if (--this.bugTimer <= 0) {
+            this.spawnBug()
+            this.bugTimer = 300 + Math.random() * 220
+        }
+    }
+
+    private fireStaple(b: Boss) {
+        // Low staples must be jumped; later volleys mix in high ones that punish jumping at the wrong time.
+        const high = b.hp <= 3 && b.burst % 2 === 0
+        const floor = 13 * TILE
+        this.staples.push({
+            x: b.dir === 1 ? b.x + b.w + 2 : b.x - 8,
+            y: high ? floor - 30 : floor - 10,
+            vx: b.dir * Math.min(4, 2.4 * (1 + (BOSS_HP - b.hp) * 0.12)),
+            dead: false,
+        })
+        sound.play('staple')
+    }
+
+    private updateStaples() {
+        const p = this.player
+        this.staples.forEach((st) => {
+            st.x += st.vx
+            const col = Math.floor((st.x + 3) / TILE)
+            const row = Math.floor((st.y + 1) / TILE)
+            if (col <= 0 || col >= this.level.cols - 1 || isSolid(this.level.tiles[row]?.[col])) st.dead = true
+            const box = { x: st.x, y: st.y, w: 6, h: 3, vx: 0, vy: 0, onGround: false }
+            if (!st.dead && overlaps(p, box)) {
+                st.dead = true
+                this.hurt()
+            }
+        })
+        this.staples = this.staples.filter((st) => !st.dead)
+    }
+
+    private spawnBug() {
+        const fromLeft = Math.random() < 0.5
+        this.enemies.push({
+            kind: 'bug',
+            x: fromLeft ? TILE + 2 : (this.level.cols - 2) * TILE + 2,
+            y: 13 * TILE - 12,
+            w: 12,
+            h: 12,
+            vx: 0,
+            vy: 0,
+            onGround: true,
+            dir: fromLeft ? 1 : -1,
+            speed: BUG_SPEED,
+            crossing: true,
+            mode: 'walk',
+            timer: 0,
+            active: true,
+            dead: false,
+        })
+    }
+
+    private touchBoss(prevBottom: number, jumpDown: boolean) {
+        const b = this.boss
+        const p = this.player
+        if (!b || b.mode === 'defeated' || b.hurt > 0 || !overlaps(p, b)) return
+        if (prevBottom > b.y + 6) {
+            this.hurt()
+            return
+        }
+        // Stomped on his head.
+        b.hp--
+        b.hurt = 90
+        p.vy = jumpDown ? -7 : -5.5
+        this.addScore(1000, b.x, b.y - 8)
+        sound.play('bossHit')
+        if (b.hp > 0) {
+            this.say(this.pick(HIT_LINES), 120)
+            return
+        }
+        b.mode = 'defeated'
+        b.vy = -5
+        b.timer = 0
+        this.say(DEFEAT_LINE, 210)
+        this.addScore(5000, b.x, b.y - 20)
+        this.staples = []
+        this.enemies = []
+        music.stop()
+        sound.play('flag')
+    }
+
+    // ---- Coffee and broken bricks -------------------------------------------
+
+    private spawnCoffee(col: number, row: number) {
         this.items.push({
             x: col * TILE + 2,
             y: row * TILE,
@@ -770,7 +1003,7 @@ export class Game {
                 break
             case 'M':
                 tiles[row][col] = 'U'
-                this.spawnApple(col, row)
+                this.spawnCoffee(col, row)
                 break
             case 'B':
                 if (this.big) this.breakBrick(col, row)
@@ -851,6 +1084,11 @@ export class Game {
 
     private updateCamera(snap: boolean) {
         const levelWidth = this.level.cols * TILE
+        // A room narrower than the screen (the boss office) sits in the middle.
+        if (levelWidth <= this.viewWidth) {
+            this.camX = (levelWidth - this.viewWidth) / 2
+            return
+        }
         const target = this.player.x - this.viewWidth * 0.4
         const max = Math.max(0, levelWidth - this.viewWidth)
         const clamped = Math.max(0, Math.min(max, target))
@@ -897,7 +1135,9 @@ export class Game {
 
         // Far-away layers scroll slower than the level, for depth.
         ctx.setTransform(scale, 0, 0, scale, 0, offsetY)
-        if (this.theme === 'dark') {
+        if (this.level.mode === 'boss') {
+            this.drawOffice(camX)
+        } else if (this.theme === 'dark') {
             ctx.fillStyle = p.star
             this.stars.forEach((star) => {
                 const x = (((star.x - camX * 0.1) % this.viewWidth) + this.viewWidth) % this.viewWidth
@@ -906,9 +1146,11 @@ export class Game {
             })
             this.drawMoon()
         }
-        this.drawMountains(camX)
-        this.drawClouds(camX)
-        this.drawFarHills(camX)
+        if (this.level.mode !== 'boss') {
+            this.drawMountains(camX)
+            this.drawClouds(camX)
+            this.drawFarHills(camX)
+        }
 
         ctx.setTransform(scale, 0, 0, scale, -camX * scale, offsetY)
         this.level.decor.forEach((d) => this.drawDecor(d))
@@ -918,17 +1160,21 @@ export class Game {
 
         const behindPipe = this.state === 'pipeDown' || this.state === 'pipeUp'
         if (behindPipe) this.drawPlayer()
-        // Apples rising out of a block are drawn behind it.
+        // Coffee rising out of a block is drawn behind it.
         this.drawItems(true)
         this.drawTiles(camX)
+        this.drawOutside(camX)
         this.drawBelowLevel(camX)
         this.drawFlag()
         this.drawItems(false)
+        this.drawBoss()
         this.drawEnemies()
+        this.drawStaples()
         this.drawCoinPops()
         this.drawDebris()
         if (!behindPipe) this.drawPlayer()
         this.drawPopups()
+        this.drawSpeech(camX)
 
         ctx.setTransform(scale, 0, 0, scale, 0, 0)
         if (this.state === 'intro') this.drawIntro()
@@ -952,9 +1198,12 @@ export class Game {
 
                 let sprite: HTMLCanvasElement | null = null
                 switch (tile) {
-                    case '#':
-                        sprite = row > 0 && tiles[row - 1][col] === '#' ? s.ground : s.groundTop
+                    case '#': {
+                        const top = !(row > 0 && tiles[row - 1][col] === '#')
+                        if (this.level.mode === 'boss') sprite = top ? s.officeFloorTop : s.officeFloor
+                        else sprite = top ? s.groundTop : s.ground
                         break
+                    }
                     case 'B':
                         sprite = s.brick
                         break
@@ -1034,7 +1283,7 @@ export class Game {
     private drawItems(rising: boolean) {
         this.items.forEach((item) => {
             if ((item.rising > 0) !== rising) return
-            this.ctx.drawImage(this.sprites.apple, Math.round(item.x - 2), Math.round(item.y + item.h - TILE))
+            this.ctx.drawImage(this.sprites.coffee, Math.round(item.x - 2), Math.round(item.y + item.h - TILE))
         })
     }
 
@@ -1148,8 +1397,8 @@ export class Game {
         this.enemies.forEach((e) => {
             if (!e.active) return
             let sprite: HTMLCanvasElement
-            if (e.kind === 'spiky') sprite = this.sprites.spiky[e.dir === 1 ? 'right' : 'left'][step]
-            else sprite = e.mode === 'flat' ? this.sprites.blob.flat : this.sprites.blob.walk[step]
+            if (e.kind === 'shredder') sprite = this.sprites.shredder[e.dir === 1 ? 'right' : 'left'][step]
+            else sprite = e.mode === 'flat' ? this.sprites.bug.flat : this.sprites.bug.walk[step]
             const x = Math.round(e.x - 2)
             const y = Math.round(e.y + e.h - TILE)
             if (e.mode === 'knocked') {
@@ -1163,6 +1412,173 @@ export class Game {
                 ctx.drawImage(sprite, x, y)
             }
         })
+    }
+
+    private drawBoss() {
+        const b = this.boss
+        if (!b) return
+        // Flash after being stomped.
+        if (b.hurt > 0 && Math.floor(b.hurt / 4) % 2 === 0) return
+        const ctx = this.ctx
+        const facing = b.dir === 1 ? 'right' : 'left'
+        const walking = b.vx !== 0 && b.onGround && Math.floor(this.frame / 8) % 2 === 1
+        const frame = b.mode === 'aim' ? 'aim' : walking ? 'walk' : 'stand'
+        const sprite = this.sprites.boss[frame][facing]
+        const x = Math.round(b.x - 3)
+        const y = Math.round(b.y + b.h - sprite.height)
+        if (b.mode === 'defeated') {
+            ctx.save()
+            ctx.translate(x, y + sprite.height)
+            ctx.scale(1, -1)
+            ctx.drawImage(sprite, 0, 0)
+            ctx.restore()
+            return
+        }
+        ctx.drawImage(sprite, x, y)
+        if (b.mode === 'aim') {
+            ctx.drawImage(this.sprites.stapler[facing], facing === 'right' ? x + 20 : x - 8, y + 19)
+        }
+    }
+
+    private drawStaples() {
+        const ctx = this.ctx
+        this.staples.forEach((st) => {
+            const x = Math.round(st.x)
+            const y = Math.round(st.y)
+            ctx.fillStyle = '#1a1a22'
+            ctx.fillRect(x - 1, y - 1, 8, 5)
+            ctx.fillStyle = '#d8d8e8'
+            ctx.fillRect(x, y, 6, 1)
+            ctx.fillRect(x, y, 1, 3)
+            ctx.fillRect(x + 5, y, 1, 3)
+        })
+    }
+
+    // The Manager's speech bubble.
+    private drawSpeech(camX: number) {
+        const b = this.boss
+        if (!b || b.tauntFrames <= 0) return
+        const ctx = this.ctx
+        ctx.font = 'bold 7px sans-serif'
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'top'
+        // Wrap the words to fit a small bubble.
+        const lines: string[] = []
+        b.taunt.split(' ').forEach((word) => {
+            const last = lines[lines.length - 1]
+            if (last !== undefined && ctx.measureText(`${last} ${word}`).width <= 110) lines[lines.length - 1] = `${last} ${word}`
+            else lines.push(word)
+        })
+        const width = Math.ceil(Math.max(...lines.map((line) => ctx.measureText(line).width))) + 10
+        const height = lines.length * 9 + 6
+        const headX = b.x + b.w / 2
+        const bx = Math.round(Math.max(camX + 4, Math.min(camX + this.viewWidth - width - 4, headX - width / 2)))
+        const by = Math.round(b.y - height - 12)
+        ctx.fillStyle = '#101010'
+        ctx.fillRect(bx - 1, by - 1, width + 2, height + 2)
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(bx, by, width, height)
+        // Tail pointing at his head.
+        const tailX = Math.round(Math.max(bx + 4, Math.min(bx + width - 8, headX - 2)))
+        for (let i = 0; i < 6; i++) {
+            ctx.fillStyle = '#101010'
+            ctx.fillRect(tailX - 1 + i / 2, by + height + i, 6 - i + 2, 1)
+            ctx.fillStyle = '#ffffff'
+            ctx.fillRect(tailX + i / 2, by + height + i - 1, 6 - i, 1)
+        }
+        ctx.fillStyle = '#101010'
+        lines.forEach((line, i) => ctx.fillText(line, bx + 5, by + 4 + i * 9))
+    }
+
+    // When the room is narrower than the screen, fill the space beyond its walls with more wall.
+    private drawOutside(camX: number) {
+        const cols = this.level.cols
+        const first = Math.floor(camX / TILE)
+        const last = Math.ceil((camX + this.viewWidth) / TILE)
+        for (let col = first; col <= last; col++) {
+            if (col >= 0 && col < cols) continue
+            for (let row = 0; row < ROWS; row++) this.ctx.drawImage(this.sprites.hard, col * TILE, row * TILE)
+        }
+    }
+
+    // The Manager's office: a wall with windows onto the city, posters and a clock.
+    private drawOffice(camX: number) {
+        const ctx = this.ctx
+        const dark = this.theme === 'dark'
+        const width = this.viewWidth
+        const top = -this.offsetY - 1
+        const floor = 13 * TILE
+        const wall = dark ? '#2e3040' : '#e2d8c0'
+        ctx.fillStyle = wall
+        ctx.fillRect(0, top, width, floor - top)
+        // Wainscoting along the bottom of the wall.
+        ctx.fillStyle = shade(wall, -0.15)
+        ctx.fillRect(0, floor - 40, width, 40)
+        ctx.fillStyle = shade(wall, 0.25)
+        ctx.fillRect(0, floor - 41, width, 1)
+        ctx.fillStyle = shade(wall, -0.35)
+        ctx.fillRect(0, floor - 40, width, 1)
+
+        const spacing = 128
+        const shift = camX * 0.5
+        const firstWindow = Math.floor(shift / spacing) - 1
+        for (let k = firstWindow; k < firstWindow + width / spacing + 3; k++) {
+            const x = Math.round(k * spacing - shift)
+            const hash = (n: number) => {
+                const v = Math.sin(k * 91.7 + n * 47.3) * 43758.5453
+                return v - Math.floor(v)
+            }
+            // Window frame and glass.
+            ctx.fillStyle = shade(wall, -0.45)
+            ctx.fillRect(x - 3, 21, 70, 80)
+            const glass = ctx.createLinearGradient(0, 24, 0, 98)
+            glass.addColorStop(0, dark ? '#070a22' : '#5a9af0')
+            glass.addColorStop(1, dark ? '#243060' : '#c8e4ff')
+            ctx.fillStyle = glass
+            ctx.fillRect(x, 24, 64, 74)
+            // City skyline, with lit windows at night.
+            for (let i = 0; i < 8; i++) {
+                const h = 16 + Math.floor(hash(i) * 40)
+                ctx.fillStyle = dark ? '#141a30' : '#8aa0c0'
+                ctx.fillRect(x + i * 8, 98 - h, 8, h)
+                if (!dark) continue
+                ctx.fillStyle = '#ffd860'
+                for (let wy = 98 - h + 3; wy < 96; wy += 5) {
+                    for (let wx = 1; wx < 7; wx += 3) {
+                        if (hash(i * 13 + wy + wx) > 0.55) ctx.fillRect(x + i * 8 + wx, wy, 1, 2)
+                    }
+                }
+            }
+            ctx.fillStyle = shade(wall, -0.45)
+            ctx.fillRect(x + 31, 24, 2, 74)
+            ctx.fillRect(x, 60, 64, 2)
+            ctx.fillStyle = shade(wall, 0.3)
+            ctx.fillRect(x - 3, 101, 70, 2)
+
+            if (k % 2 === 0) {
+                // A motivational poster.
+                const px = x + 80
+                ctx.fillStyle = '#1a1a1a'
+                ctx.fillRect(px, 40, 32, 40)
+                ctx.fillStyle = dark ? '#2a3a6a' : '#3a6ad0'
+                ctx.fillRect(px + 2, 42, 28, 26)
+                ctx.fillStyle = dark ? '#8a94c8' : '#ffffff'
+                for (let i = 0; i < 10; i++) ctx.fillRect(px + 16 - i, 52 + i, i * 2, 1)
+                ctx.fillStyle = '#ffffff'
+                ctx.font = 'bold 5px sans-serif'
+                ctx.textAlign = 'center'
+                ctx.textBaseline = 'middle'
+                ctx.fillText('SYNERGY', px + 16, 74)
+            } else {
+                // A wall clock.
+                const cx = x + 96
+                this.ellipse(cx, 72, 10, 10, '#1a1a1a')
+                this.ellipse(cx, 72, 8, 8, dark ? '#c8c8d0' : '#ffffff')
+                ctx.fillStyle = '#1a1a1a'
+                ctx.fillRect(cx, 66, 1, 6)
+                ctx.fillRect(cx, 72, 4, 1)
+            }
+        }
     }
 
     private drawCheckpoint() {
@@ -1200,6 +1616,7 @@ export class Game {
     }
 
     private drawFlag() {
+        if (this.level.flagCol === undefined) return
         const ctx = this.ctx
         const p = this.sprites.palette
         const poleX = this.level.flagCol * TILE + 7
@@ -1224,6 +1641,7 @@ export class Game {
     }
 
     private drawCastle() {
+        if (this.level.castleCol === undefined) return
         const ctx = this.ctx
         const p = this.sprites.palette
         const x = this.level.castleCol * TILE
@@ -1337,10 +1755,17 @@ export class Game {
         ctx.textBaseline = 'middle'
         ctx.fillStyle = '#ffffff'
         ctx.fillText(`WORLD ${this.level.name}`, width / 2, height / 2 - 20)
-        ctx.drawImage(this.sprites.player.stand.right, width / 2 - 26, height / 2 - 2)
+        if (this.boss) {
+            ctx.font = '9px SuperMario256, monospace'
+            ctx.fillStyle = '#ff5050'
+            ctx.fillText('BOSS FIGHT: THE MANAGER', width / 2, height / 2 - 6)
+            ctx.fillStyle = '#ffffff'
+        }
+        const livesY = this.boss ? height / 2 + 10 : height / 2 - 2
+        ctx.drawImage(this.sprites.player.stand.right, width / 2 - 26, livesY)
         ctx.font = '10px SuperMario256, monospace'
         ctx.textAlign = 'left'
-        ctx.fillText(`x  ${this.lives}`, width / 2 - 4, height / 2 + 6)
+        ctx.fillText(`x  ${this.lives}`, width / 2 - 4, livesY + 8)
     }
 
     private drawHud() {
@@ -1358,7 +1783,7 @@ export class Game {
             ctx.fillText(value, x, y)
         }
 
-        if (this.level.mode === 'challenge') {
+        if (this.level.mode !== 'site') {
             const middle = w * 0.36
             text('FRED', 12, 8, 'left')
             text(String(this.score).padStart(6, '0'), 12, 19, 'left')
@@ -1370,6 +1795,17 @@ export class Game {
             text(this.level.name, w * 0.68, 19, 'center')
             text('TIME', w - 12, 8, 'right')
             text(String(Math.max(0, this.time)), w - 12, 19, 'right')
+            if (this.boss) {
+                // The Manager's health bar.
+                text('MANAGER', w / 2, 34, 'center')
+                for (let i = 0; i < BOSS_HP; i++) {
+                    const x = w / 2 - (BOSS_HP * 10) / 2 + i * 10
+                    ctx.fillStyle = '#000000'
+                    ctx.fillRect(x, 45, 9, 6)
+                    ctx.fillStyle = i < this.boss.hp ? '#e02020' : '#444444'
+                    ctx.fillRect(x + 1, 46, 7, 4)
+                }
+            }
             return
         }
 

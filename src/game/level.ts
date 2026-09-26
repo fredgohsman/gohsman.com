@@ -7,7 +7,7 @@
  *   .  empty                 #  ground
  *   B  brick                 X  hard block (stairs, flagpole base)
  *   ?  coin block            U  used (empty) block
- *   M  power block: looks like ?, holds a power apple
+ *   M  power block: looks like ?, holds a cup of coffee
  *   A  "About me" block      a  used "About me" block (bump again to reopen)
  *   P  project block         p  used project block (bump again to reopen)
  *   [ ]  pipe top            { }  pipe body
@@ -16,14 +16,15 @@
  *
  * World 1-1 is the website: its blocks and pipe open the site's sections, and nothing can hurt you.
  * World 1-2 is just a game: enemies, pits that cost a life, a timer and a checkpoint.
+ * World 1-3 is a boss fight against The Manager, in his office.
  */
 
 export const TILE = 16
 export const ROWS = 15
 
-export type LevelId = 1 | 2
+export type LevelId = 1 | 2 | 3
 export type Section = 'about' | 'work' | 'project' | 'contact'
-export type EnemyKind = 'blob' | 'spiky'
+export type EnemyKind = 'bug' | 'shredder'
 
 export interface Label {
     // Centre of the label, in tiles.
@@ -50,13 +51,15 @@ export interface EnemySpawn {
 export interface Level {
     id: LevelId
     name: string
-    // 'site' levels open the website's sections; 'challenge' levels have enemies, lives and a timer.
-    mode: 'site' | 'challenge'
+    // 'site' levels open the website's sections; 'challenge' levels have enemies, lives and a timer;
+    // 'boss' levels are a challenge level with The Manager in it.
+    mode: 'site' | 'challenge' | 'boss'
     cols: number
     tiles: string[][]
     start: { col: number; row: number }
-    flagCol: number
-    castleCol: number
+    flagCol?: number
+    castleCol?: number
+    bossCol?: number
     checkpointCol?: number
     time?: number
     labels: Label[]
@@ -110,7 +113,9 @@ function createGrid(cols: number) {
 }
 
 export function buildLevel(id: LevelId): Level {
-    return id === 1 ? buildWorld1() : buildWorld2()
+    if (id === 1) return buildWorld1()
+    if (id === 2) return buildWorld2()
+    return buildWorld3()
 }
 
 function buildWorld1(): Level {
@@ -121,8 +126,8 @@ function buildWorld1(): Level {
     ground(0, 37)
     ground(41, cols - 1)
 
-    // A lone power block to learn on, then the About Me block.
-    put(6, 9, 'M')
+    // A lone coin block to learn on, then the About Me block.
+    put(6, 9, '?')
     put(10, 9, 'B?A?B')
 
     // Coins, a small pipe, then the Work pipe.
@@ -133,6 +138,9 @@ function buildWorld1(): Level {
 
     // Coins arcing over the pit.
     put(38, 9, 'ooo')
+
+    // The coffee (power-up) comes just before halfway, right before the projects.
+    put(43, 9, 'M')
 
     // Projects: one block per project.
     put(46, 9, 'PBPBPBP')
@@ -264,25 +272,56 @@ function buildWorld2(): Level {
         labels: [],
         decor,
         enemies: [
-            { kind: 'blob', col: 21 },
-            { kind: 'blob', col: 30 },
-            { kind: 'blob', col: 40 },
-            { kind: 'blob', col: 41.5 },
-            { kind: 'blob', col: 50 },
-            { kind: 'blob', col: 52 },
-            { kind: 'blob', col: 64 },
-            { kind: 'blob', col: 83, row: 4 },
-            { kind: 'blob', col: 97 },
-            { kind: 'blob', col: 99 },
-            { kind: 'spiky', col: 106 },
-            { kind: 'blob', col: 120 },
-            { kind: 'blob', col: 122 },
-            { kind: 'spiky', col: 128, row: 4 },
-            { kind: 'spiky', col: 148 },
-            { kind: 'blob', col: 152 },
-            { kind: 'blob', col: 154 },
-            { kind: 'blob', col: 170 },
-            { kind: 'spiky', col: 178 },
+            { kind: 'bug', col: 21 },
+            { kind: 'bug', col: 30 },
+            { kind: 'bug', col: 40 },
+            { kind: 'bug', col: 41.5 },
+            { kind: 'bug', col: 50 },
+            { kind: 'bug', col: 52 },
+            { kind: 'bug', col: 64 },
+            { kind: 'bug', col: 83, row: 4 },
+            { kind: 'bug', col: 97 },
+            { kind: 'bug', col: 99 },
+            { kind: 'shredder', col: 106 },
+            { kind: 'bug', col: 120 },
+            { kind: 'bug', col: 122 },
+            { kind: 'shredder', col: 128, row: 4 },
+            { kind: 'shredder', col: 148 },
+            { kind: 'bug', col: 152 },
+            { kind: 'bug', col: 154 },
+            { kind: 'bug', col: 170 },
+            { kind: 'shredder', col: 178 },
         ],
+    }
+}
+
+function buildWorld3(): Level {
+    const cols = 30
+    const { tiles, set, put, ground } = createGrid(cols)
+
+    // The Manager's office: a floor, walls at both ends, and platforms to dodge staples from.
+    ground(0, cols - 1)
+    for (let r = 0; r < 13; r++) {
+        set(0, r, 'X')
+        set(cols - 1, r, 'X')
+    }
+    put(4, 9, 'BBBB')
+    put(22, 9, 'BBBB')
+    put(14, 9, 'M')
+    put(11, 5, 'BBBBBBBB')
+    put(12, 4, 'oooooo')
+
+    return {
+        id: 3,
+        name: '1-3',
+        mode: 'boss',
+        cols,
+        tiles,
+        start: { col: 3, row: 12 },
+        bossCol: 24,
+        time: 300,
+        labels: [],
+        decor: [],
+        enemies: [],
     }
 }

@@ -3,6 +3,8 @@
  *
  *   day   - "Overworld Stroll": bright and bouncy, C major, square-wave lead.
  *   night - "Starlit Walk": slower and dreamy, A minor, soft triangle lead with an echo.
+ *   bossDay / bossNight - "Quarterly Review": the boss fight, D minor with a driving bass.
+ *     Same notes in both; the night version is a little slower with a softer, echoing lead.
  *
  * Songs are written one step (an eighth note) per token:
  *   C5  play a note     -  hold the previous note     .  rest
@@ -11,7 +13,7 @@
 
 import { getAudioContext, getNoiseBuffer, sound } from './sound'
 
-export type Track = 'day' | 'night'
+export type Track = 'day' | 'night' | 'bossDay' | 'bossNight'
 
 interface Voice {
     wave: OscillatorType
@@ -26,6 +28,29 @@ interface Song {
     voices: Voice[]
     drums: string
 }
+
+const BOSS_LEAD = [
+    'D5 . D5 F5 . D5 A5 G5',
+    'F5 - E5 D5 - C5 D5 .',
+    'Bb4 . D5 F5 . D5 Bb5 A5',
+    'A5 - G5 F5 E5 - C#5 .',
+    'D6 - A5 F5 D6 - A5 F5',
+    'G5 - Bb5 G5 D5 - G5 Bb5',
+    'F5 G5 A5 Bb5 A5 G5 F5 E5',
+    'A5 - E5 C#5 A4 - . .',
+].join(' ')
+
+const pump = (low: string, high: string) => `${low} ${high} `.repeat(4).trim()
+const BOSS_BASS = [
+    pump('D2', 'D3'),
+    pump('D2', 'D3'),
+    pump('Bb1', 'Bb2'),
+    pump('A1', 'A2'),
+    pump('D2', 'D3'),
+    pump('G1', 'G2'),
+    pump('Bb1', 'Bb2'),
+    pump('A1', 'A2'),
+].join(' ')
 
 const SONGS: Record<Track, Song> = {
     day: {
@@ -97,6 +122,22 @@ const SONGS: Record<Track, Song> = {
         ],
         drums: 'k . . . h . . . '.repeat(8),
     },
+    bossDay: {
+        bpm: 160,
+        voices: [
+            { wave: 'square', volume: 0.045, notes: BOSS_LEAD },
+            { wave: 'triangle', volume: 0.14, notes: BOSS_BASS },
+        ],
+        drums: 'k h s h k k s h '.repeat(8),
+    },
+    bossNight: {
+        bpm: 140,
+        voices: [
+            { wave: 'triangle', volume: 0.13, echo: 3, notes: BOSS_LEAD },
+            { wave: 'sine', volume: 0.13, notes: BOSS_BASS },
+        ],
+        drums: 'k h . h k . s h '.repeat(8),
+    },
 }
 
 interface NoteEvent {
@@ -137,10 +178,8 @@ function parseVoice(voice: Voice): NoteEvent[] {
     return events
 }
 
-const parsed: Record<Track, { events: NoteEvent[]; drums: string[]; steps: number }> = {
-    day: parseSong(SONGS.day),
-    night: parseSong(SONGS.night),
-}
+const parsed = {} as Record<Track, { events: NoteEvent[]; drums: string[]; steps: number }>
+;(Object.keys(SONGS) as Track[]).forEach((track) => (parsed[track] = parseSong(SONGS[track])))
 
 function parseSong(song: Song) {
     const events = song.voices.flatMap(parseVoice)

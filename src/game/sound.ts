@@ -17,6 +17,8 @@ export type SoundName =
     | 'powerup'
     | 'shrink'
     | 'break'
+    | 'staple'
+    | 'bossHit'
 
 const STORAGE_KEY = 'sound-muted'
 
@@ -133,6 +135,13 @@ const effects: Record<SoundName, (ctx: AudioContext) => void> = {
     break: (ctx) => {
         noise(ctx, 0, 0.25, 0.2)
         tone(ctx, 180, 0, 0.12, 'triangle', 0.15, 60)
+    },
+    staple: (ctx) => {
+        noise(ctx, 0, 0.04, 0.12)
+        tone(ctx, 1400, 0, 0.05, 'square', 0.04, 700)
+    },
+    bossHit: (ctx) => {
+        ;[660, 520, 390, 260].forEach((f, i) => tone(ctx, f, i * 0.05, 0.08, 'square', 0.07))
     },
     open: (ctx) => {
         ;[523, 659, 784].forEach((f, i) => tone(ctx, f, i * 0.06, 0.12, 'square', 0.05))
