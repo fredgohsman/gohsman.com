@@ -8,8 +8,9 @@
 
 import { Decor, EnemyKind, Level, LevelId, ROWS, Section, TILE, buildLevel } from './level'
 import { Body, PHYSICS, moveBody, overlappingTiles, overlaps } from './physics'
-import { Sprites, Theme, buildSprites } from './sprites'
+import { Sprites, Theme, buildSprites, shade } from './sprites'
 import { sound } from './sound'
+import { music } from './music'
 
 export type Control = 'left' | 'right' | 'up' | 'down' | 'jump' | 'run'
 
@@ -24,7 +25,7 @@ export interface GameCallbacks {
     onGameOver: (result: RunResult) => void
 }
 
-type State = 'title' | 'intro' | 'play' | 'pipeDown' | 'pipeUp' | 'flagSlide' | 'flagWalk' | 'dying' | 'panel'
+type State = 'title' | 'intro' | 'play' | 'grow' | 'pipeDown' | 'pipeUp' | 'flagSlide' | 'flagWalk' | 'dying' | 'panel'
 
 // What to do when a panel is closed.
 type ResumeAction = 'play' | 'pipeUp' | 'castleExit'
@@ -42,6 +43,22 @@ interface Enemy extends Body {
     timer: number
     active: boolean
     dead: boolean
+}
+
+// A power apple sliding along the ground.
+interface Item extends Body {
+    dir: 1 | -1
+    // Frames left of rising out of its block.
+    rising: number
+    dead: boolean
+}
+
+interface Debris {
+    x: number
+    y: number
+    vx: number
+    vy: number
+    frame: number
 }
 
 interface Popup {
@@ -64,6 +81,12 @@ const MIN_VIEW_COLS = 16
 // Space kept below the level for the on-screen buttons on tall (portrait) touch screens, in CSS pixels.
 const TOUCH_RESERVE = 110
 const START_LIVES = 3
+const SMALL_HEIGHT = 16
+const BIG_HEIGHT = 30
+// Frames of flashing (and no damage) after shrinking.
+const INVINCIBLE_FRAMES = 120
+// World 1-2 plays the music a little faster.
+const CHALLENGE_TEMPO = 1.12
 const ENEMY_SPEED = 0.5
 // The in-game clock ticks once every 24 frames (0.4 seconds), like the old games.
 const TIME_TICK = 24
@@ -113,6 +136,9 @@ export class Game {
     private hidden = false
     private flagY = 3 * TILE
     private flagDone = false
+    private big = false
+    private invincible = 0
+    private pipeFrames = 0
 
     private coins = 0
     private score = 0
@@ -121,6 +147,8 @@ export class Game {
     private timeTick = 0
     private checkpointReached = false
     private enemies: Enemy[] = []
+    private items: Item[] = []
+    private debris: Debris[] = []
     private popups: Popup[] = []
     private bumps: Bump[] = []
     private coinPops: CoinPop[] = []
@@ -159,6 +187,7 @@ export class Game {
     }
 
     stop() {
+        music.stop()
         cancelAnimationFrame(this.rafId)
         window.removeEventListener('keydown', this.handleKeyDown)
         window.removeEventListener('keyup', this.handleKeyUp)
@@ -167,7 +196,9 @@ export class Game {
 
     // Leaves the title screen and hands control to the player.
     begin() {
-        if (this.state === 'title') this.state = 'play'
+        if (this.state !== 'title') return
+        this.state = 'play'
+        this.startMusic()
     }
 
     // Switches to a level. World 1-2 always starts a fresh run with full lives.
@@ -180,6 +211,8 @@ export class Game {
         this.releaseAll()
         this.state = this.level.mode === 'challenge' ? 'intro' : 'play'
         this.timer = 0
+        if (this.state === 'play') this.startMusic()
+        else music.stop()
     }
 
     // Called when a panel is closed.
@@ -192,6 +225,7 @@ export class Game {
         } else if (this.resumeAction === 'castleExit') {
             this.hidden = false
             this.state = 'play'
+            this.startMusic()
         } else {
             this.state = 'play'
         }
@@ -201,6 +235,15 @@ export class Game {
         if (theme === this.theme) return
         this.theme = theme
         this.sprites = buildSprites(theme)
+        music.switchTrack(this.track())
+    }
+
+    private track() {
+        return this.theme === 'dark' ? 'night' : 'day'
+    }
+
+    private startMusic() {
+        music.play(this.track(), this.level.mode === 'challenge' ? CHALLENGE_TEMPO : 1)
     }
 
     // Touch devices get shorter on-screen hints.
@@ -266,22 +309,31 @@ export class Game {
 
         switch (this.state) {
             case 'intro':
-                if (++this.timer >= 150) this.state = 'play'
+                if (++this.timer >= 150) {
+                    this.state = 'play'
+                    this.startMusic()
+                }
                 break
             case 'play':
                 this.updatePlay()
-                if (this.state === 'play') this.updateEnemies()
+                if (this.state === 'play') {
+                    this.updateEnemies()
+                    this.updateItems()
+                }
+                break
+            case 'grow':
+                if (++this.timer >= 48) this.state = 'play'
                 break
             case 'dying':
                 this.updateDying()
                 break
             case 'pipeDown':
                 this.player.y += 0.8
-                if (++this.timer >= 22) this.openSection('work', undefined, 'pipeUp')
+                if (++this.timer >= this.pipeFrames) this.openSection('work', undefined, 'pipeUp')
                 break
             case 'pipeUp':
                 this.player.y -= 0.8
-                if (++this.timer >= 22) {
+                if (++this.timer >= this.pipeFrames) {
                     this.player.y = Math.round(this.player.y)
                     this.state = 'play'
                 }
@@ -331,6 +383,7 @@ export class Game {
         if (challenge) this.touchEnemies(prevBottom, jumpDown)
         if (this.state !== 'play') return
 
+        if (this.invincible > 0) this.invincible--
         if (p.onGround) this.lastSafe = { x: p.x, y: p.y }
         this.walkFrame = p.onGround && p.vx !== 0 ? this.walkFrame + Math.abs(p.vx) * 0.12 : 0
 
@@ -368,6 +421,8 @@ export class Game {
         if (p.onGround && c.down && this.isOnWorkPipe()) {
             this.state = 'pipeDown'
             this.timer = 0
+            // Sink far enough to disappear completely, small or tall.
+            this.pipeFrames = Math.ceil((p.h + 2) / 0.8)
             p.vx = 0
             sound.play('pipe')
         }
@@ -391,6 +446,7 @@ export class Game {
             p.vx = 0
             p.vy = 0
             this.facing = 'right'
+            music.stop()
             sound.play('flag')
         }
     }
@@ -443,7 +499,11 @@ export class Game {
         this.level = buildLevel(this.level.id)
         const { start, checkpointCol } = this.level
         const startCol = atCheckpoint && checkpointCol !== undefined ? checkpointCol : start.col
-        this.player = { x: startCol * TILE + 2, y: start.row * TILE, w: 12, h: 16, vx: 0, vy: 0, onGround: true }
+        this.player = { x: startCol * TILE + 2, y: start.row * TILE, w: 12, h: SMALL_HEIGHT, vx: 0, vy: 0, onGround: true }
+        this.big = false
+        this.invincible = 0
+        this.items = []
+        this.debris = []
         this.lastSafe = { x: this.player.x, y: this.player.y }
         this.facing = 'right'
         this.walkFrame = 0
@@ -479,7 +539,29 @@ export class Game {
         this.updateCamera(true)
     }
 
+    // Grows or shrinks the player, keeping their feet where they are.
+    private setBig(big: boolean) {
+        const p = this.player
+        const height = big ? BIG_HEIGHT : SMALL_HEIGHT
+        p.y += p.h - height
+        p.h = height
+        this.big = big
+    }
+
+    // An enemy touched the player: tall Fred shrinks, small Fred loses a life.
+    private hurt() {
+        if (this.invincible > 0) return
+        if (this.big) {
+            this.setBig(false)
+            this.invincible = INVINCIBLE_FRAMES
+            sound.play('shrink')
+            return
+        }
+        this.die()
+    }
+
     private die() {
+        music.stop()
         this.state = 'dying'
         this.timer = 0
         this.player.vx = 0
@@ -570,10 +652,78 @@ export class Game {
                 this.addScore(100, e.x, e.y - 8)
                 sound.play('stomp')
             } else {
-                this.die()
-                return
+                this.hurt()
+                if (this.state !== 'play') return
             }
         }
+    }
+
+    // ---- Power apples and broken bricks -------------------------------------
+
+    private spawnApple(col: number, row: number) {
+        this.items.push({
+            x: col * TILE + 2,
+            y: row * TILE,
+            w: 12,
+            h: 14,
+            vx: 0,
+            vy: 0,
+            onGround: false,
+            dir: 1,
+            rising: 32,
+            dead: false,
+        })
+        sound.play('sprout')
+    }
+
+    private updateItems() {
+        const p = this.player
+        this.items.forEach((item) => {
+            if (item.rising > 0) {
+                item.rising--
+                item.y -= 0.5
+                return
+            }
+            item.vx = item.dir * 1
+            item.vy = Math.min(item.vy + PHYSICS.gravity, PHYSICS.maxFall)
+            moveBody(item, this.level.tiles)
+            if (item.vx === 0) item.dir = item.dir === 1 ? -1 : 1
+            if (item.y > ROWS * TILE + 32) item.dead = true
+            if (!item.dead && overlaps(p, item)) {
+                item.dead = true
+                this.addScore(1000, item.x, item.y - 8)
+                sound.play('powerup')
+                if (!this.big) {
+                    this.setBig(true)
+                    this.state = 'grow'
+                    this.timer = 0
+                }
+            }
+        })
+        this.items = this.items.filter((item) => !item.dead)
+    }
+
+    private breakBrick(col: number, row: number) {
+        this.level.tiles[row][col] = '.'
+        const x = col * TILE
+        const y = row * TILE
+        ;[
+            [-1.2, -5],
+            [1.2, -5],
+            [-1, -3.5],
+            [1, -3.5],
+        ].forEach(([vx, vy], i) => this.debris.push({ x: x + (i % 2) * 8, y: y + (i < 2 ? 0 : 8), vx, vy, frame: 0 }))
+        this.score += 50
+        sound.play('break')
+    }
+
+    // Items and enemies standing on a block that gets bumped from below are knocked up.
+    private popItemsOn(col: number, row: number) {
+        this.items.forEach((item) => {
+            const onTop = Math.abs(item.y + item.h - row * TILE) < 3
+            const above = item.x + item.w > col * TILE && item.x < (col + 1) * TILE
+            if (item.rising === 0 && onTop && above) item.vy = -4
+        })
     }
 
     // Enemies standing on a block that gets bumped from below are knocked out.
@@ -608,14 +758,23 @@ export class Game {
         const tile = tiles[row][col]
         const key = `${col},${row}`
 
-        if ('B?AaPp'.includes(tile)) {
+        if ('B?MAaPp'.includes(tile)) {
             this.bumps.push({ col, row, frame: 0 })
             this.knockEnemiesOn(col, row)
+            this.popItemsOn(col, row)
         }
         switch (tile) {
             case '?':
                 tiles[row][col] = 'U'
                 this.addCoin(col, row)
+                break
+            case 'M':
+                tiles[row][col] = 'U'
+                this.spawnApple(col, row)
+                break
+            case 'B':
+                if (this.big) this.breakBrick(col, row)
+                else sound.play('bump')
                 break
             case 'A':
                 tiles[row][col] = 'a'
@@ -680,6 +839,12 @@ export class Game {
             popup.y -= 0.6
             return ++popup.frame < 50
         })
+        this.debris = this.debris.filter((d) => {
+            d.x += d.vx
+            d.y += d.vy
+            d.vy += 0.3
+            return ++d.frame < 90
+        })
     }
 
     // ---- Camera -------------------------------------------------------------
@@ -722,20 +887,30 @@ export class Game {
 
         ctx.setTransform(1, 0, 0, 1, 0, 0)
         ctx.imageSmoothingEnabled = false
-        ctx.fillStyle = p.sky
+        const sky = ctx.createLinearGradient(0, 0, 0, this.canvas.height)
+        sky.addColorStop(0, p.skyTop)
+        sky.addColorStop(1, p.skyBottom)
+        ctx.fillStyle = sky
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height)
 
         const offsetY = Math.round(this.offsetY * scale)
-        ctx.setTransform(scale, 0, 0, scale, -camX * scale, offsetY)
 
+        // Far-away layers scroll slower than the level, for depth.
+        ctx.setTransform(scale, 0, 0, scale, 0, offsetY)
         if (this.theme === 'dark') {
             ctx.fillStyle = p.star
             this.stars.forEach((star) => {
+                const x = (((star.x - camX * 0.1) % this.viewWidth) + this.viewWidth) % this.viewWidth
                 const twinkle = (star.x + this.frame) % 90 < 6
-                ctx.fillRect(star.x, star.y, twinkle ? 2 : 1, twinkle ? 2 : 1)
+                ctx.fillRect(x, star.y, twinkle ? 2 : 1, twinkle ? 2 : 1)
             })
+            this.drawMoon()
         }
+        this.drawMountains(camX)
+        this.drawClouds(camX)
+        this.drawFarHills(camX)
 
+        ctx.setTransform(scale, 0, 0, scale, -camX * scale, offsetY)
         this.level.decor.forEach((d) => this.drawDecor(d))
         this.drawCastle()
         this.drawLabels()
@@ -743,11 +918,15 @@ export class Game {
 
         const behindPipe = this.state === 'pipeDown' || this.state === 'pipeUp'
         if (behindPipe) this.drawPlayer()
+        // Apples rising out of a block are drawn behind it.
+        this.drawItems(true)
         this.drawTiles(camX)
         this.drawBelowLevel(camX)
         this.drawFlag()
+        this.drawItems(false)
         this.drawEnemies()
         this.drawCoinPops()
+        this.drawDebris()
         if (!behindPipe) this.drawPlayer()
         this.drawPopups()
 
@@ -783,6 +962,7 @@ export class Game {
                         sprite = s.hard
                         break
                     case '?':
+                    case 'M':
                     case 'A':
                     case 'P':
                         sprite = s.block
@@ -813,7 +993,7 @@ export class Game {
                 }
                 if (sprite) ctx.drawImage(sprite, x, y)
                 // Unopened blocks pulse gently so they read as "hit me".
-                if (tile === '?' || tile === 'A' || tile === 'P') {
+                if (tile === '?' || tile === 'M' || tile === 'A' || tile === 'P') {
                     const glow = (Math.sin(this.frame / 10) + 1) / 2
                     ctx.fillStyle = `rgba(255,255,255,${glow * 0.25})`
                     ctx.fillRect(x + 1, y + 1, TILE - 2, TILE - 2)
@@ -837,14 +1017,129 @@ export class Game {
 
     private drawPlayer() {
         if (this.hidden) return
+        // Flash while invincible after shrinking.
+        if (this.invincible > 0 && Math.floor(this.invincible / 4) % 2 === 0) return
         const p = this.player
-        const frames = this.sprites.player
+        // While growing, flicker between small and tall.
+        const showBig = this.state === 'grow' ? Math.floor(this.timer / 6) % 2 === 1 : this.big
+        const frames = showBig ? this.sprites.bigPlayer : this.sprites.player
         let frame: keyof typeof frames = 'stand'
         if (this.state === 'flagSlide' || this.state === 'dying') frame = 'jump'
         else if (!p.onGround && this.state === 'play') frame = 'jump'
         else if (p.vx !== 0) frame = Math.floor(this.walkFrame) % 2 === 0 ? 'walk1' : 'walk2'
         const sprite = frames[frame][this.facing]
-        this.ctx.drawImage(sprite, Math.round(p.x - 2), Math.round(p.y))
+        this.ctx.drawImage(sprite, Math.round(p.x - 2), Math.round(p.y + p.h - sprite.height))
+    }
+
+    private drawItems(rising: boolean) {
+        this.items.forEach((item) => {
+            if ((item.rising > 0) !== rising) return
+            this.ctx.drawImage(this.sprites.apple, Math.round(item.x - 2), Math.round(item.y + item.h - TILE))
+        })
+    }
+
+    private drawDebris() {
+        const brick = this.sprites.palette.brick
+        this.debris.forEach((d) => {
+            const x = Math.round(d.x)
+            const y = Math.round(d.y)
+            this.ctx.fillStyle = shade(brick, -0.6)
+            this.ctx.fillRect(x - 1, y - 1, 8, 8)
+            this.ctx.fillStyle = brick
+            this.ctx.fillRect(x, y, 6, 6)
+            this.ctx.fillStyle = shade(brick, 0.4)
+            this.ctx.fillRect(x, y, 6, 1)
+        })
+    }
+
+    // A pixel-art filled ellipse.
+    private ellipse(cx: number, cy: number, rx: number, ry: number, color: string) {
+        const ctx = this.ctx
+        ctx.fillStyle = color
+        for (let dy = -ry; dy <= ry; dy++) {
+            const half = Math.round(rx * Math.sqrt(1 - (dy * dy) / (ry * ry)))
+            ctx.fillRect(Math.round(cx - half), Math.round(cy + dy), half * 2, 1.5)
+        }
+    }
+
+    private drawMoon() {
+        const p = this.sprites.palette
+        const x = this.viewWidth * 0.78
+        const y = 38
+        ;[26, 20].forEach((r, i) => this.ellipse(x, y, r, r, `rgba(255,244,192,${0.05 + i * 0.05})`))
+        this.ellipse(x, y, 13, 13, p.moon)
+        this.ellipse(x + 3, y + 3, 10, 10, shade(p.moon, -0.08))
+        this.ellipse(x - 2, y - 2, 11, 11, p.moon)
+        ;[
+            [-4, -3, 3],
+            [4, 2, 2],
+            [-1, 5, 2],
+        ].forEach(([dx, dy, r]) => this.ellipse(x + dx, y + dy, r, r, shade(p.moon, -0.15)))
+    }
+
+    // Distant mountains with snowy peaks, scrolling at a fifth of the level's speed.
+    private drawMountains(camX: number) {
+        const ctx = this.ctx
+        const p = this.sprites.palette
+        const base = 13 * TILE
+        const height = (wx: number) => 62 + 24 * Math.sin(wx * 0.011) + 16 * Math.sin(wx * 0.029 + 2) + 7 * Math.sin(wx * 0.07 + 1)
+        for (let sx = 0; sx < this.viewWidth + 2; sx += 2) {
+            const wx = sx + camX * 0.2
+            const h = height(wx)
+            // Compare with a point a little to the left, so the lit side changes smoothly.
+            const rising = h > height(wx - 8)
+            const top = Math.round(base - h)
+            ctx.fillStyle = shade(p.mountain, rising ? 0.12 : -0.08)
+            // 3px wide on a 2px step: the overlap hides seams when the screen scale isn't a whole number.
+            ctx.fillRect(sx, top, 3, base - top)
+            if (h > 82) {
+                ctx.fillStyle = shade(p.mountainSnow, rising ? 0 : -0.15)
+                ctx.fillRect(sx, top, 3, Math.min(8, h - 82 + 2))
+            }
+        }
+    }
+
+    // Rolling hills between the mountains and the level, at half speed.
+    private drawFarHills(camX: number) {
+        const ctx = this.ctx
+        const p = this.sprites.palette
+        const base = 13 * TILE
+        for (let sx = 0; sx < this.viewWidth + 2; sx += 2) {
+            const wx = sx + camX * 0.45
+            const h = 30 + 12 * Math.sin(wx * 0.021) + 7 * Math.sin(wx * 0.053 + 3)
+            const top = Math.round(base - h)
+            ctx.fillStyle = p.farHill
+            ctx.fillRect(sx, top, 3, base - top)
+            ctx.fillStyle = shade(p.farHill, 0.2)
+            ctx.fillRect(sx, top, 3, 2)
+        }
+    }
+
+    // Puffy clouds that drift slowly and scroll at a third of the level's speed.
+    private drawClouds(camX: number) {
+        const p = this.sprites.palette
+        const spacing = 150
+        const shift = camX * 0.3 + this.frame * 0.05
+        const first = Math.floor(shift / spacing) - 1
+        for (let k = first; k < first + this.viewWidth / spacing + 3; k++) {
+            const hash = (n: number) => {
+                const v = Math.sin(k * 127.1 + n * 311.7) * 43758.5453
+                return v - Math.floor(v)
+            }
+            const x = k * spacing + hash(1) * 60 - shift
+            const y = 24 + hash(2) * 46
+            const puffs = 2 + Math.floor(hash(3) * 3)
+            const draw = (color: string, grow: number, dy: number) => {
+                for (let i = 0; i < puffs; i++) {
+                    const r = i === 0 || i === puffs - 1 ? 8 : 11
+                    this.ellipse(x + i * 12, y - (r - 8) + dy, r + grow, r * 0.8 + grow, color)
+                }
+                this.ellipse(x + ((puffs - 1) * 12) / 2, y + 3 + dy, (puffs - 1) * 6 + 8 + grow, 6 + grow, color)
+            }
+            draw(shade(p.cloudShade, -0.2), 1, 0)
+            draw(p.cloudShade, 0, 0)
+            draw(p.cloud, -1, -2)
+        }
     }
 
     private drawEnemies() {
@@ -876,7 +1171,7 @@ export class Game {
         const ctx = this.ctx
         const p = this.sprites.palette
         const x = checkpointCol * TILE + 7
-        ctx.fillStyle = p.hardDark
+        ctx.fillStyle = shade(p.hard, -0.5)
         ctx.fillRect(x, 10 * TILE, 2, 3 * TILE)
         // Grey until reached, then gold.
         ctx.fillStyle = this.checkpointReached ? p.block : '#9a9a9a'
@@ -909,13 +1204,15 @@ export class Game {
         const p = this.sprites.palette
         const poleX = this.level.flagCol * TILE + 7
         const top = 2 * TILE
-        ctx.fillStyle = p.pipeLight
-        ctx.fillRect(poleX, top, 2, 12 * TILE - top)
+        ctx.fillStyle = shade(p.pipe, 0.5)
+        ctx.fillRect(poleX, top, 1, 12 * TILE - top)
+        ctx.fillStyle = shade(p.pipe, 0.1)
+        ctx.fillRect(poleX + 1, top, 1, 12 * TILE - top)
         // Ball on top.
-        ctx.fillStyle = p.pipe
-        ctx.fillRect(poleX - 2, top - 5, 6, 6)
-        ctx.fillStyle = p.pipeDark
-        ctx.fillRect(poleX - 2, top - 5, 6, 1)
+        this.ellipse(poleX + 1, top - 3, 4, 4, shade(p.pipe, -0.5))
+        this.ellipse(poleX + 1, top - 3, 3, 3, p.pipe)
+        ctx.fillStyle = shade(p.pipe, 0.6)
+        ctx.fillRect(poleX, top - 5, 1, 1)
         // The flag: a white pennant with a star.
         ctx.fillStyle = '#ffffff'
         for (let i = 0; i < 12; i++) {
@@ -934,6 +1231,11 @@ export class Game {
         const brick = (bx: number, by: number, w: number, h: number) => {
             ctx.fillStyle = p.castle
             ctx.fillRect(bx, by, w, h)
+            // Brick highlights, then mortar lines.
+            ctx.fillStyle = shade(p.castle, 0.3)
+            for (let y = by; y < by + h; y += 4) ctx.fillRect(bx, y, w, 1)
+            ctx.fillStyle = shade(p.castle, -0.25)
+            ctx.fillRect(bx + w - 2, by, 2, h)
             ctx.fillStyle = p.castleDark
             for (let y = by + 3; y < by + h; y += 4) ctx.fillRect(bx, y, w, 1)
             for (let y = by; y < by + h; y += 4) {
@@ -959,30 +1261,40 @@ export class Game {
         const x = d.col * TILE
         const y = d.row * TILE
         if (d.kind === 'hill') {
-            // A stepped mound, `size` tiles tall.
+            // A rounded mound, `size` tiles tall: outlined, lit from the upper left.
             const height = d.size * TILE
+            const cx = x + height * 1.2
+            const halfAt = (i: number) => Math.round(Math.sqrt(1 - Math.pow(1 - i / height, 2)) * height * 1.2)
+            // Three passes (outline, body, highlight) so overlapping rows never leave dark lines.
             for (let i = 0; i < height; i++) {
-                const half = Math.round(Math.sqrt(1 - Math.pow(1 - i / height, 2)) * height * 1.2)
-                ctx.fillStyle = p.hill
-                ctx.fillRect(x + height * 1.2 - half, y - height + i, half * 2, 1)
+                ctx.fillStyle = shade(p.hill, -0.55)
+                ctx.fillRect(cx - halfAt(i) - 1, y - height + i, halfAt(i) * 2 + 2, 1.5)
             }
-            ctx.fillStyle = p.hillDark
-            ctx.fillRect(x + height * 1.2 - 3, y - height + 8, 2, 4)
-            ctx.fillRect(x + height * 1.2 + 4, y - height + 12, 2, 4)
+            for (let i = 0; i < height; i++) {
+                ctx.fillStyle = shade(p.hill, -0.1 - (i / height) * 0.15)
+                ctx.fillRect(cx - halfAt(i), y - height + i, halfAt(i) * 2, 1.5)
+            }
+            ctx.fillStyle = shade(p.hill, 0.25)
+            for (let i = 0; i < height; i++) {
+                ctx.fillRect(cx - halfAt(i), y - height + i, Math.max(1, Math.round(halfAt(i) * 0.35)), 1.5)
+            }
+            ctx.fillStyle = shade(p.hill, -0.55)
+            ctx.fillRect(cx - 4, y - height, 8, 1)
+            ctx.fillStyle = shade(p.hill, -0.35)
+            ctx.fillRect(cx - 3, y - height + 8, 2, 4)
+            ctx.fillRect(cx + 4, y - height + 12, 2, 4)
         } else {
-            // Clouds and bushes share a shape: a row of puffs.
-            const width = (d.size + 1) * TILE
-            ctx.fillStyle = d.kind === 'cloud' ? p.cloud : p.bush
-            for (let i = 0; i <= d.size; i++) {
-                const cx = x + 8 + i * TILE
-                ctx.fillRect(cx - 6, y - 14, 12, 14)
-                ctx.fillRect(cx - 8, y - 10, 16, 10)
+            // Bushes: a row of puffs, outlined and shaded.
+            const draw = (color: string, grow: number, dy: number) => {
+                for (let i = 0; i <= d.size; i++) this.ellipse(x + 8 + i * TILE, y - 8 + dy, 8 + grow, 7 + grow, color)
+                ctx.fillStyle = color
+                ctx.fillRect(x + 2 - grow, y - 6 + dy, d.size * TILE + 12 + grow * 2, 6)
             }
-            ctx.fillRect(x, y - 8, width + 8, 8)
-            if (d.kind === 'cloud') {
-                ctx.fillStyle = p.cloudShade
-                ctx.fillRect(x + 2, y - 2, width + 4, 2)
-            }
+            draw(shade(p.bush, -0.6), 1, 0)
+            draw(shade(p.bush, -0.15), 0, 0)
+            draw(p.bush, -2, -2)
+            ctx.fillStyle = shade(p.bush, 0.35)
+            for (let i = 0; i <= d.size; i++) ctx.fillRect(x + 4 + i * TILE, y - 13, 4, 2)
         }
     }
 

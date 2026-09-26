@@ -3,7 +3,20 @@
  * No audio files: each effect is a few short square/triangle wave notes.
  */
 
-export type SoundName = 'jump' | 'coin' | 'bump' | 'pipe' | 'flag' | 'open' | 'stomp' | 'die' | 'gameover'
+export type SoundName =
+    | 'jump'
+    | 'coin'
+    | 'bump'
+    | 'pipe'
+    | 'flag'
+    | 'open'
+    | 'stomp'
+    | 'die'
+    | 'gameover'
+    | 'sprout'
+    | 'powerup'
+    | 'shrink'
+    | 'break'
 
 const STORAGE_KEY = 'sound-muted'
 
@@ -21,12 +34,45 @@ function readMuted(): boolean {
     }
 }
 
-function getContext(): AudioContext | null {
+// One shared audio context for sound effects and music.
+export function getAudioContext(): AudioContext | null {
     if (context) return context
     const AudioCtor = window.AudioContext || (window as any).webkitAudioContext
     if (!AudioCtor) return null
     context = new AudioCtor()
+    // Pause all audio while the tab is hidden, so music doesn't stutter or pile up.
+    document.addEventListener('visibilitychange', () => {
+        if (!context) return
+        if (document.hidden) context.suspend()
+        else if (unlocked) context.resume()
+    })
     return context
+}
+
+let unlocked = false
+const getContext = getAudioContext
+
+let noiseBuffer: AudioBuffer | null = null
+
+// White noise, for crunchy effects and drums.
+export function getNoiseBuffer(ctx: AudioContext): AudioBuffer {
+    if (noiseBuffer) return noiseBuffer
+    noiseBuffer = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate)
+    const data = noiseBuffer.getChannelData(0)
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+    return noiseBuffer
+}
+
+function noise(ctx: AudioContext, start: number, duration: number, volume: number) {
+    const source = ctx.createBufferSource()
+    const gain = ctx.createGain()
+    const t0 = ctx.currentTime + start
+    source.buffer = getNoiseBuffer(ctx)
+    gain.gain.setValueAtTime(volume, t0)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration)
+    source.connect(gain).connect(ctx.destination)
+    source.start(t0)
+    source.stop(t0 + duration + 0.02)
 }
 
 // Plays one note. Times are in seconds from now.
@@ -77,6 +123,17 @@ const effects: Record<SoundName, (ctx: AudioContext) => void> = {
     gameover: (ctx) => {
         ;[523, 392, 330, 440, 494, 440, 415, 466, 415, 392].forEach((f, i) => tone(ctx, f, i * 0.18, 0.16, 'triangle', 0.15))
     },
+    sprout: (ctx) => tone(ctx, 200, 0, 0.35, 'square', 0.05, 800),
+    powerup: (ctx) => {
+        ;[392, 494, 587, 784, 988, 1175].forEach((f, i) => tone(ctx, f, i * 0.06, 0.1, 'square', 0.06))
+    },
+    shrink: (ctx) => {
+        ;[784, 587, 440, 330].forEach((f, i) => tone(ctx, f, i * 0.08, 0.1, 'square', 0.06))
+    },
+    break: (ctx) => {
+        noise(ctx, 0, 0.25, 0.2)
+        tone(ctx, 180, 0, 0.12, 'triangle', 0.15, 60)
+    },
     open: (ctx) => {
         ;[523, 659, 784].forEach((f, i) => tone(ctx, f, i * 0.06, 0.12, 'square', 0.05))
     },
@@ -105,6 +162,7 @@ export const sound = {
     // Browsers only allow audio after a user gesture, so call this from a click or key press.
     unlock() {
         const ctx = getContext()
+        unlocked = true
         if (ctx && ctx.state === 'suspended') {
             ctx.resume()
         }

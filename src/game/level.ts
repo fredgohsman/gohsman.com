@@ -7,6 +7,7 @@
  *   .  empty                 #  ground
  *   B  brick                 X  hard block (stairs, flagpole base)
  *   ?  coin block            U  used (empty) block
+ *   M  power block: looks like ?, holds a power apple
  *   A  "About me" block      a  used "About me" block (bump again to reopen)
  *   P  project block         p  used project block (bump again to reopen)
  *   [ ]  pipe top            { }  pipe body
@@ -33,7 +34,7 @@ export interface Label {
 }
 
 export interface Decor {
-    kind: 'cloud' | 'hill' | 'bush'
+    kind: 'hill' | 'bush'
     col: number
     row: number
     size: number
@@ -63,7 +64,7 @@ export interface Level {
     enemies: EnemySpawn[]
 }
 
-const SOLID = 'B?AaPpUX#[]{}W'
+const SOLID = 'B?MAaPpUX#[]{}W'
 
 export const isSolid = (tile: string | undefined) => tile !== undefined && tile !== '' && SOLID.includes(tile)
 
@@ -120,8 +121,8 @@ function buildWorld1(): Level {
     ground(0, 37)
     ground(41, cols - 1)
 
-    // A lone coin block to learn on, then the About Me block.
-    put(6, 9, '?')
+    // A lone power block to learn on, then the About Me block.
+    put(6, 9, 'M')
     put(10, 9, 'B?A?B')
 
     // Coins, a small pipe, then the Work pipe.
@@ -176,14 +177,6 @@ function buildWorld1(): Level {
             { kind: 'bush', col: 25, row: 13, size: 1 },
             { kind: 'bush', col: 42, row: 13, size: 2 },
             { kind: 'bush', col: 74, row: 13, size: 3 },
-            { kind: 'cloud', col: 8, row: 2, size: 1 },
-            { kind: 'cloud', col: 20, row: 3, size: 1 },
-            { kind: 'cloud', col: 28, row: 1.5, size: 3 },
-            { kind: 'cloud', col: 38, row: 2.5, size: 2 },
-            { kind: 'cloud', col: 60, row: 1, size: 1 },
-            { kind: 'cloud', col: 68, row: 2, size: 2 },
-            { kind: 'cloud', col: 86, row: 1.5, size: 1 },
-            { kind: 'cloud', col: 104, row: 2, size: 2 },
         ],
         enemies: [],
     }
@@ -203,7 +196,7 @@ function buildWorld2(): Level {
     // Opening blocks.
     put(10, 9, '?')
     put(14, 9, 'B?B?B')
-    put(16, 5, '?')
+    put(16, 5, 'M')
 
     // A run of pipes, each taller than the last, with enemies in between.
     pipe(24, 2)
@@ -224,7 +217,7 @@ function buildWorld2(): Level {
 
     // Past the checkpoint: a block triangle.
     put(112, 9, '?  ?  ?')
-    put(115, 5, '?')
+    put(115, 5, 'M')
     put(124, 9, 'B')
     put(127, 5, 'BBB')
     put(130, 5, 'B??B')
@@ -246,18 +239,14 @@ function buildWorld2(): Level {
     const flagCol = 193
     set(flagCol, 12, 'X')
 
-    // Background scenery repeats every 48 columns, like the old games.
+    // Hills and bushes repeat every 48 columns, like the old games. (Clouds and mountains are drawn by the engine.)
     const decor: Decor[] = []
     for (let base = 0; base < cols; base += 48) {
         decor.push(
             { kind: 'hill', col: base, row: 13, size: 3 },
             { kind: 'hill', col: base + 16, row: 13, size: 2 },
             { kind: 'bush', col: base + 11, row: 13, size: 3 },
-            { kind: 'bush', col: base + 41, row: 13, size: 1 },
-            { kind: 'cloud', col: base + 8, row: 2, size: 1 },
-            { kind: 'cloud', col: base + 19, row: 1.5, size: 1 },
-            { kind: 'cloud', col: base + 27, row: 2.5, size: 3 },
-            { kind: 'cloud', col: base + 36, row: 1.5, size: 2 }
+            { kind: 'bush', col: base + 41, row: 13, size: 1 }
         )
     }
 
