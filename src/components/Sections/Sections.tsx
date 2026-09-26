@@ -36,6 +36,15 @@ export const WorkSection = () => (
                 ))}
             </ul>
         )}
+        {work.resumeElsewhere && (
+            <p>
+                My full resume is on{' '}
+                <a href={work.resumeElsewhere.url} target="_blank" rel="noreferrer">
+                    {work.resumeElsewhere.label}
+                </a>
+                .
+            </p>
+        )}
         {work.resumeUrl && (
             <a className="site-button" href={work.resumeUrl} target="_blank" rel="noreferrer">
                 Download resume
