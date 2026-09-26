@@ -3,7 +3,7 @@
  * No audio files: each effect is a few short square/triangle wave notes.
  */
 
-export type SoundName = 'jump' | 'coin' | 'bump' | 'pipe' | 'flag' | 'open'
+export type SoundName = 'jump' | 'coin' | 'bump' | 'pipe' | 'flag' | 'open' | 'stomp' | 'die' | 'gameover'
 
 const STORAGE_KEY = 'sound-muted'
 
@@ -69,6 +69,13 @@ const effects: Record<SoundName, (ctx: AudioContext) => void> = {
     flag: (ctx) => {
         tone(ctx, 1200, 0, 0.8, 'square', 0.05, 300)
         ;[523, 659, 784, 1047].forEach((f, i) => tone(ctx, f, 0.9 + i * 0.12, 0.2))
+    },
+    stomp: (ctx) => tone(ctx, 500, 0, 0.12, 'square', 0.07, 120),
+    die: (ctx) => {
+        ;[494, 698, 698, 698, 659, 587, 523].forEach((f, i) => tone(ctx, f, 0.15 + i * 0.14, 0.12))
+    },
+    gameover: (ctx) => {
+        ;[523, 392, 330, 440, 494, 440, 415, 466, 415, 392].forEach((f, i) => tone(ctx, f, i * 0.18, 0.16, 'triangle', 0.15))
     },
     open: (ctx) => {
         ;[523, 659, 784].forEach((f, i) => tone(ctx, f, i * 0.06, 0.12, 'square', 0.05))

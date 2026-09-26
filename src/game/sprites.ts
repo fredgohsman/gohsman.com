@@ -347,6 +347,69 @@ function paintCoin(ctx: CanvasRenderingContext2D) {
     paintGrid(ctx, rows, { D: '#8a4c00', Y: '#fcc000', W: '#fff4c8' })
 }
 
+// ---- Enemies (World 1-2) -----------------------------------------------------
+
+// Pads a grid to 16x16 with the art sitting on the bottom edge.
+function toTile(rows: string[]): string[] {
+    const padded = rows.map((row) => row.padEnd(TILE, '.').slice(0, TILE))
+    while (padded.length < TILE) padded.unshift('.'.repeat(TILE))
+    return padded
+}
+
+const BLOB_COLORS: Record<string, string> = {
+    D: '#1e5a14', // outline
+    G: '#5cc02e', // body
+    L: '#b4f07a', // shine
+    W: '#ffffff',
+    K: '#101010',
+}
+
+// A grumpy slime. Stomp it.
+const BLOB_TOP = [
+    '.....DDDDDD.....',
+    '...DDGGGGGGDD...',
+    '..DGGLLGGGGGGD..',
+    '.DGGLGGGGGGGGGD.',
+    '.DGKKGGGGGGKKGD.',
+    'DGGWKKGGGGKKWGGD',
+    'DGGWWKGGGGKWWGGD',
+    'DGGGGGGGGGGGGGGD',
+    'DGGGGGKKKKGGGGGD',
+    'DGGGGKGGGGKGGGGD',
+]
+const BLOB_1 = toTile([...BLOB_TOP, 'DGGGGGGGGGGGGGGD', '.DDGGDDGGDDGGDD.', '...DD..DD..DD...'])
+const BLOB_2 = toTile([...BLOB_TOP, 'DGGGGGGGGGGGGGGD', '.DGGDDGGDDGGDDD.', '..DD..DD..DD....'])
+const BLOB_FLAT = toTile([
+    '..DDDDDDDDDDDD..',
+    '.DGKKGGGGGGKKGD.',
+    'DGGGGGKKKKGGGGGD',
+    '.DDDDDDDDDDDDDD.',
+])
+
+const SPIKY_COLORS: Record<string, string> = {
+    S: '#d8d8e8', // spikes
+    T: '#6a6a80', // spike shadow
+    B: '#8a5a2a', // body
+    F: '#e0b080', // face
+    K: '#101010',
+    N: '#e0302a', // nose
+}
+
+// A hedgehog with a back full of spikes. Don't stomp it.
+const SPIKY_TOP = [
+    '...S..S..S......',
+    '..SST.SST.SS....',
+    '.SSTSSTSSTSST...',
+    'SSTSSTSSTSSTFF..',
+    'STSSTSSTSSTFFFF.',
+    'SSTSSTSSTSFFKFF.',
+    'STSSTSSTSSFFFFFN',
+    'BBBBBBBBBBFFFFF.',
+    '.BBBBBBBBBBFFF..',
+]
+const SPIKY_1 = toTile([...SPIKY_TOP, '..BBBBBBBBBB....', '..KK......KK....'])
+const SPIKY_2 = toTile([...SPIKY_TOP, '..BBBBBBBBBB....', '....KK..KK......'])
+
 // ---- Sprite sheet ------------------------------------------------------------
 
 export interface Sprites {
@@ -360,6 +423,9 @@ export interface Sprites {
     used: Canvas
     pipe: Record<'topL' | 'topR' | 'bodyL' | 'bodyR', Canvas>
     coin: Canvas
+    // Enemy frames face right; `left` versions are mirrored.
+    blob: { walk: [Canvas, Canvas]; flat: Canvas }
+    spiky: { right: [Canvas, Canvas]; left: [Canvas, Canvas] }
 }
 
 export function buildSprites(theme: Theme): Sprites {
@@ -390,5 +456,19 @@ export function buildSprites(theme: Theme): Sprites {
             bodyR: tile((ctx) => paintPipe(ctx, p, 'bodyR')),
         },
         coin: tile(paintCoin),
+        blob: {
+            walk: [tile((ctx) => paintGrid(ctx, BLOB_1, BLOB_COLORS)), tile((ctx) => paintGrid(ctx, BLOB_2, BLOB_COLORS))],
+            flat: tile((ctx) => paintGrid(ctx, BLOB_FLAT, BLOB_COLORS)),
+        },
+        spiky: {
+            right: [
+                tile((ctx) => paintGrid(ctx, SPIKY_1, SPIKY_COLORS)),
+                tile((ctx) => paintGrid(ctx, SPIKY_2, SPIKY_COLORS)),
+            ],
+            left: [
+                tile((ctx) => paintGrid(ctx, SPIKY_1, SPIKY_COLORS, true)),
+                tile((ctx) => paintGrid(ctx, SPIKY_2, SPIKY_COLORS, true)),
+            ],
+        },
     }
 }

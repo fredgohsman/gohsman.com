@@ -1,9 +1,10 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { ThemeContext } from 'contexts'
-import { Control, Game } from 'game/engine'
-import { Section } from 'game/level'
+import { Control, Game, RunResult } from 'game/engine'
+import { LevelId, Section } from 'game/level'
 import { TouchControls } from 'game/touchControls'
 import { InfoPanel } from 'components/InfoPanel/InfoPanel'
+import { GameMessage } from 'components/GameMessage/GameMessage'
 import './GameCanvas.css'
 
 interface IProps {
@@ -13,6 +14,10 @@ interface IProps {
 interface OpenPanel {
     section: Section
     projectIndex?: number
+}
+
+interface RunEnd extends RunResult {
+    outcome: 'clear' | 'gameover'
 }
 
 const isTouchDevice = () =>
@@ -25,6 +30,7 @@ export const GameCanvas = ({ started }: IProps) => {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const gameRef = useRef<Game | null>(null)
     const [panel, setPanel] = useState<OpenPanel | null>(null)
+    const [runEnd, setRunEnd] = useState<RunEnd | null>(null)
     const [foundProjects, setFoundProjects] = useState<number[]>([])
     const [touch] = useState(isTouchDevice)
 
@@ -40,6 +46,8 @@ export const GameCanvas = ({ started }: IProps) => {
                     setFoundProjects((found) => (found.includes(projectIndex) ? found : [...found, projectIndex]))
                 }
             },
+            onLevelComplete: (result) => setRunEnd({ ...result, outcome: 'clear' }),
+            onGameOver: (result) => setRunEnd({ ...result, outcome: 'gameover' }),
         })
         gameRef.current = game
         game.start()
@@ -78,6 +86,12 @@ export const GameCanvas = ({ started }: IProps) => {
         gameRef.current?.resume()
     }, [])
 
+    const goToLevel = useCallback((id: LevelId) => {
+        setPanel(null)
+        setRunEnd(null)
+        gameRef.current?.loadLevel(id)
+    }, [])
+
     const onControl = useCallback((control: Control, down: boolean) => {
         gameRef.current?.setControl(control, down)
     }, [])
@@ -85,13 +99,24 @@ export const GameCanvas = ({ started }: IProps) => {
     return (
         <div className="game-canvas">
             <canvas ref={canvasRef} aria-hidden="true" />
-            {started && touch && !panel && <TouchControls onControl={onControl} />}
+            {started && touch && !panel && !runEnd && <TouchControls onControl={onControl} />}
             {panel && (
                 <InfoPanel
                     section={panel.section}
                     projectIndex={panel.projectIndex}
                     projectsFound={foundProjects.length}
                     onClose={closePanel}
+                    onNextLevel={() => goToLevel(2)}
+                />
+            )}
+            {runEnd && (
+                <GameMessage
+                    title={runEnd.outcome === 'clear' ? 'Course Clear!' : 'Game Over'}
+                    lines={[`Score ${runEnd.score}`, `Coins ${runEnd.coins}`]}
+                    actions={[
+                        { label: runEnd.outcome === 'clear' ? 'Play again' : 'Try again', onClick: () => goToLevel(2) },
+                        { label: 'Back to 1-1', onClick: () => goToLevel(1) },
+                    ]}
                 />
             )}
         </div>

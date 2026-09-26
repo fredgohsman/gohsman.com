@@ -9,10 +9,11 @@ interface IProps {
     projectIndex?: number
     projectsFound: number
     onClose: () => void
+    onNextLevel?: () => void
 }
 
 // The pop-up box the game opens when you hit a block, enter a pipe or reach the flag.
-export const InfoPanel = ({ section, projectIndex, projectsFound, onClose }: IProps) => {
+export const InfoPanel = ({ section, projectIndex, projectsFound, onClose, onNextLevel }: IProps) => {
     const panelRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
@@ -56,9 +57,16 @@ export const InfoPanel = ({ section, projectIndex, projectsFound, onClose }: IPr
                     </section>
                 )}
                 {section === 'contact' && <ContactSection />}
-                <button type="button" className="info-panel-continue" onClick={onClose}>
-                    {section === 'contact' ? 'Keep exploring' : 'Continue'}
-                </button>
+                <div className="info-panel-actions">
+                    {section === 'contact' && onNextLevel && (
+                        <button type="button" className="info-panel-continue" onClick={onNextLevel}>
+                            Play World 1-2 →
+                        </button>
+                    )}
+                    <button type="button" className="info-panel-continue" onClick={onClose}>
+                        {section === 'contact' ? 'Keep exploring' : 'Continue'}
+                    </button>
+                </div>
             </div>
         </div>
     )

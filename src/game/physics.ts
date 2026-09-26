@@ -3,7 +3,7 @@
  * Speeds are in pixels per frame at 60 frames per second.
  */
 
-import { COLS, ROWS, TILE, isSolid } from './level'
+import { ROWS, TILE, isSolid } from './level'
 
 export const PHYSICS = {
     walkSpeed: 2,
@@ -35,7 +35,7 @@ export interface HeadBump {
 }
 
 const tileAt = (tiles: string[][], col: number, row: number) => {
-    if (col < 0 || col >= COLS) return 'X' // level edges act as walls
+    if (col < 0 || col >= tiles[0].length) return 'X' // level edges act as walls
     if (row < 0 || row >= ROWS) return '.'
     return tiles[row][col]
 }
@@ -104,8 +104,11 @@ export function moveBody(body: Body, tiles: string[][]): HeadBump | null {
     return null
 }
 
+// True if two bodies overlap.
+export const overlaps = (a: Body, b: Body) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
+
 // Tiles the body overlaps (used for collecting coins).
-export function overlappingTiles(body: Body): HeadBump[] {
+export function overlappingTiles(body: Body, cols: number): HeadBump[] {
     const result: HeadBump[] = []
     const left = Math.floor(body.x / TILE)
     const right = Math.floor((body.x + body.w - 0.01) / TILE)
@@ -113,7 +116,7 @@ export function overlappingTiles(body: Body): HeadBump[] {
     const bottom = Math.floor((body.y + body.h - 0.01) / TILE)
     for (let row = top; row <= bottom; row++) {
         for (let col = left; col <= right; col++) {
-            if (row >= 0 && row < ROWS && col >= 0 && col < COLS) result.push({ col, row })
+            if (row >= 0 && row < ROWS && col >= 0 && col < cols) result.push({ col, row })
         }
     }
     return result

@@ -2,21 +2,29 @@
  * The game: input, the update loop, the camera and drawing.
  *
  * The React wrapper (components/GameCanvas) creates one Game per canvas,
- * and the game calls back into React when a site section should open.
+ * and the game calls back into React when a site section should open
+ * or when a World 1-2 run ends.
  */
 
-import { COLS, Decor, Level, ROWS, Section, TILE, buildLevel } from './level'
-import { Body, PHYSICS, moveBody, overlappingTiles } from './physics'
+import { Decor, EnemyKind, Level, LevelId, ROWS, Section, TILE, buildLevel } from './level'
+import { Body, PHYSICS, moveBody, overlappingTiles, overlaps } from './physics'
 import { Sprites, Theme, buildSprites } from './sprites'
 import { sound } from './sound'
 
 export type Control = 'left' | 'right' | 'up' | 'down' | 'jump' | 'run'
 
-export interface GameCallbacks {
-    onOpen: (section: Section, projectIndex?: number) => void
+export interface RunResult {
+    score: number
+    coins: number
 }
 
-type State = 'title' | 'play' | 'pipeDown' | 'pipeUp' | 'flagSlide' | 'flagWalk' | 'panel'
+export interface GameCallbacks {
+    onOpen: (section: Section, projectIndex?: number) => void
+    onLevelComplete: (result: RunResult) => void
+    onGameOver: (result: RunResult) => void
+}
+
+type State = 'title' | 'intro' | 'play' | 'pipeDown' | 'pipeUp' | 'flagSlide' | 'flagWalk' | 'dying' | 'panel'
 
 // What to do when a panel is closed.
 type ResumeAction = 'play' | 'pipeUp' | 'castleExit'
@@ -24,6 +32,22 @@ type ResumeAction = 'play' | 'pipeUp' | 'castleExit'
 interface Bump {
     col: number
     row: number
+    frame: number
+}
+
+interface Enemy extends Body {
+    kind: EnemyKind
+    dir: 1 | -1
+    mode: 'walk' | 'flat' | 'knocked'
+    timer: number
+    active: boolean
+    dead: boolean
+}
+
+interface Popup {
+    x: number
+    y: number
+    text: string
     frame: number
 }
 
@@ -39,6 +63,10 @@ const STEP = 1000 / 60
 const MIN_VIEW_COLS = 16
 // Space kept below the level for the on-screen buttons on tall (portrait) touch screens, in CSS pixels.
 const TOUCH_RESERVE = 110
+const START_LIVES = 3
+const ENEMY_SPEED = 0.5
+// The in-game clock ticks once every 24 frames (0.4 seconds), like the old games.
+const TIME_TICK = 24
 const KEY_MAP: Record<string, Control> = {
     ArrowLeft: 'left',
     KeyA: 'left',
@@ -59,7 +87,7 @@ export class Game {
     private readonly canvas: HTMLCanvasElement
     private readonly ctx: CanvasRenderingContext2D
     private readonly callbacks: GameCallbacks
-    private readonly level: Level
+    private level: Level
     private sprites: Sprites
     private theme: Theme
 
@@ -77,16 +105,23 @@ export class Game {
     private hasMoved = false
     private touchMode = false
 
-    private player: Body
+    private player: Body = { x: 0, y: 0, w: 12, h: 16, vx: 0, vy: 0, onGround: true }
     private facing: 'left' | 'right' = 'right'
     private walkFrame = 0
-    private lastSafe: { x: number; y: number }
+    private lastSafe = { x: 0, y: 0 }
     private timer = 0
     private hidden = false
-    private flagY: number
+    private flagY = 3 * TILE
     private flagDone = false
 
     private coins = 0
+    private score = 0
+    private lives = START_LIVES
+    private time = 0
+    private timeTick = 0
+    private checkpointReached = false
+    private enemies: Enemy[] = []
+    private popups: Popup[] = []
     private bumps: Bump[] = []
     private coinPops: CoinPop[] = []
     private projectIndexes: Record<string, number> = {}
@@ -108,14 +143,8 @@ export class Game {
         this.callbacks = callbacks
         this.theme = theme
         this.sprites = buildSprites(theme)
-        this.level = buildLevel()
-
-        const { start } = this.level
-        this.player = { x: start.col * TILE + 2, y: start.row * TILE, w: 12, h: 16, vx: 0, vy: 0, onGround: true }
-        this.lastSafe = { x: this.player.x, y: this.player.y }
-        this.flagY = 3 * TILE
-        this.indexProjects()
-        this.makeStars()
+        this.level = buildLevel(1)
+        this.resetLevel(false)
     }
 
     // ---- Public API ---------------------------------------------------------
@@ -139,6 +168,18 @@ export class Game {
     // Leaves the title screen and hands control to the player.
     begin() {
         if (this.state === 'title') this.state = 'play'
+    }
+
+    // Switches to a level. World 1-2 always starts a fresh run with full lives.
+    loadLevel(id: LevelId) {
+        this.level = buildLevel(id)
+        this.checkpointReached = false
+        this.score = 0
+        this.lives = START_LIVES
+        this.resetLevel(false)
+        this.releaseAll()
+        this.state = this.level.mode === 'challenge' ? 'intro' : 'play'
+        this.timer = 0
     }
 
     // Called when a panel is closed.
@@ -224,8 +265,15 @@ export class Game {
         this.updateEffects()
 
         switch (this.state) {
+            case 'intro':
+                if (++this.timer >= 150) this.state = 'play'
+                break
             case 'play':
                 this.updatePlay()
+                if (this.state === 'play') this.updateEnemies()
+                break
+            case 'dying':
+                this.updateDying()
                 break
             case 'pipeDown':
                 this.player.y += 0.8
@@ -251,6 +299,7 @@ export class Game {
     private updatePlay() {
         const p = this.player
         const c = this.controls
+        const challenge = this.level.mode === 'challenge'
         const dir = (c.right ? 1 : 0) - (c.left ? 1 : 0)
         const maxSpeed = c.run ? PHYSICS.runSpeed : PHYSICS.walkSpeed
 
@@ -276,20 +325,44 @@ export class Game {
         const gravity = p.vy < 0 && jumpDown ? PHYSICS.gravityHeld : PHYSICS.gravity
         p.vy = Math.min(p.vy + gravity, PHYSICS.maxFall)
 
+        const prevBottom = p.y + p.h
         const bump = moveBody(p, this.level.tiles)
         if (bump) this.bumpTile(bump.col, bump.row)
+        if (challenge) this.touchEnemies(prevBottom, jumpDown)
+        if (this.state !== 'play') return
 
         if (p.onGround) this.lastSafe = { x: p.x, y: p.y }
         this.walkFrame = p.onGround && p.vx !== 0 ? this.walkFrame + Math.abs(p.vx) * 0.12 : 0
 
         this.collectCoins()
 
-        // Fell in the pit: put the player back where they last stood.
         if (p.y > ROWS * TILE + 32) {
+            if (challenge) {
+                this.die()
+                return
+            }
+            // World 1-1 is forgiving: put the player back where they last stood.
             p.x = this.lastSafe.x
             p.y = this.lastSafe.y
             p.vx = 0
             p.vy = 0
+        }
+
+        if (challenge) {
+            const { checkpointCol } = this.level
+            if (checkpointCol !== undefined && !this.checkpointReached && p.x > checkpointCol * TILE) {
+                this.checkpointReached = true
+                this.popups.push({ x: checkpointCol * TILE, y: 9 * TILE, text: 'CHECKPOINT', frame: 0 })
+                sound.play('open')
+            }
+            if (++this.timeTick >= TIME_TICK) {
+                this.timeTick = 0
+                this.time--
+                if (this.time <= 0) {
+                    this.die()
+                    return
+                }
+            }
         }
 
         if (p.onGround && c.down && this.isOnWorkPipe()) {
@@ -309,6 +382,11 @@ export class Game {
         if (!this.flagDone && p.x + p.w >= this.level.flagCol * TILE - 1) {
             this.flagDone = true
             this.state = 'flagSlide'
+            if (challenge) {
+                // Grab the pole higher for a bigger bonus.
+                const bonus = Math.max(1, Math.round((12 * TILE - p.y) / TILE)) * 100
+                this.addScore(bonus, poleX, p.y)
+            }
             p.x = poleX - p.w + 1
             p.vx = 0
             p.vy = 0
@@ -335,9 +413,17 @@ export class Game {
         moveBody(p, this.level.tiles)
         this.walkFrame += 0.15
         const doorX = (this.level.castleCol + 2) * TILE
-        if (p.x >= doorX) {
-            p.vx = 0
-            this.hidden = true
+        if (p.x < doorX) return
+
+        p.vx = 0
+        this.hidden = true
+        if (this.level.mode === 'challenge') {
+            // Time left over turns into points.
+            this.score += this.time * 50
+            this.time = 0
+            this.state = 'panel'
+            this.callbacks.onLevelComplete({ score: this.score, coins: this.coins })
+        } else {
             this.openSection('contact', undefined, 'castleExit')
         }
     }
@@ -348,6 +434,162 @@ export class Game {
         this.player.vx = 0
         sound.play('open')
         this.callbacks.onOpen(section, projectIndex)
+    }
+
+    // ---- Lives and levels ---------------------------------------------------
+
+    // Rebuilds the current level and puts the player at the start (or at the checkpoint).
+    private resetLevel(atCheckpoint: boolean) {
+        this.level = buildLevel(this.level.id)
+        const { start, checkpointCol } = this.level
+        const startCol = atCheckpoint && checkpointCol !== undefined ? checkpointCol : start.col
+        this.player = { x: startCol * TILE + 2, y: start.row * TILE, w: 12, h: 16, vx: 0, vy: 0, onGround: true }
+        this.lastSafe = { x: this.player.x, y: this.player.y }
+        this.facing = 'right'
+        this.walkFrame = 0
+        this.hidden = false
+        this.flagDone = false
+        this.flagY = 3 * TILE
+        this.time = this.level.time ?? 0
+        this.timeTick = 0
+        this.bumps = []
+        this.coinPops = []
+        this.popups = []
+        this.enemies = this.level.enemies
+            // Never start an enemy right next to the player.
+            .filter((spawn) => spawn.col > startCol + 6)
+            .map((spawn) => ({
+                kind: spawn.kind,
+                x: spawn.col * TILE + 2,
+                y: ((spawn.row ?? 12) + 1) * TILE - 12,
+                w: 12,
+                h: 12,
+                vx: 0,
+                vy: 0,
+                onGround: false,
+                dir: -1 as const,
+                mode: 'walk' as const,
+                timer: 0,
+                active: false,
+                dead: false,
+            }))
+        this.projectIndexes = {}
+        this.indexProjects()
+        this.makeStars()
+        this.updateCamera(true)
+    }
+
+    private die() {
+        this.state = 'dying'
+        this.timer = 0
+        this.player.vx = 0
+        this.player.vy = 0
+        sound.play('die')
+    }
+
+    private updateDying() {
+        const p = this.player
+        this.timer++
+        // Pause, hop up, then fall off the screen (unless already down a pit).
+        if (this.timer === 30 && p.y < ROWS * TILE) p.vy = -5
+        if (this.timer > 30) {
+            p.vy += 0.25
+            p.y += p.vy
+        }
+        if (this.timer < 170) return
+
+        this.lives--
+        if (this.lives <= 0) {
+            this.state = 'panel'
+            sound.play('gameover')
+            this.callbacks.onGameOver({ score: this.score, coins: this.coins })
+        } else {
+            this.resetLevel(this.checkpointReached)
+            this.state = 'intro'
+            this.timer = 0
+        }
+    }
+
+    private addScore(points: number, x: number, y: number) {
+        this.score += points
+        this.popups.push({ x, y, text: String(points), frame: 0 })
+    }
+
+    // ---- Enemies ------------------------------------------------------------
+
+    private updateEnemies() {
+        // Enemies wake up just before they scroll into view.
+        const wakeX = this.camX + this.viewWidth + TILE
+        this.enemies.forEach((e) => {
+            if (!e.active && e.x < wakeX) e.active = true
+            if (!e.active) return
+            if (e.mode === 'flat') {
+                if (++e.timer > 30) e.dead = true
+                return
+            }
+            if (e.mode === 'knocked') {
+                e.vy += 0.3
+                e.x += e.vx
+                e.y += e.vy
+            } else {
+                e.vx = e.dir * ENEMY_SPEED
+                e.vy = Math.min(e.vy + PHYSICS.gravity, PHYSICS.maxFall)
+                moveBody(e, this.level.tiles)
+                // Hit a wall or pipe: turn around.
+                if (e.vx === 0) e.dir = e.dir === 1 ? -1 : 1
+            }
+            if (e.y > ROWS * TILE + 32 || e.x < this.camX - 8 * TILE) e.dead = true
+        })
+
+        // Enemies that bump into each other turn around.
+        const walking = this.enemies.filter((e) => e.active && e.mode === 'walk')
+        for (let i = 0; i < walking.length; i++) {
+            for (let j = i + 1; j < walking.length; j++) {
+                const a = walking[i]
+                const b = walking[j]
+                if (!overlaps(a, b)) continue
+                const [left, right] = a.x < b.x ? [a, b] : [b, a]
+                left.dir = -1
+                right.dir = 1
+            }
+        }
+
+        this.enemies = this.enemies.filter((e) => !e.dead)
+    }
+
+    private touchEnemies(prevBottom: number, jumpDown: boolean) {
+        const p = this.player
+        for (const e of this.enemies) {
+            if (!e.active || e.mode !== 'walk' || !overlaps(p, e)) continue
+            // Landing on top counts as a stomp; touching from the side (or stomping spikes) hurts.
+            const stomped = prevBottom <= e.y + 4
+            if (stomped && e.kind === 'blob') {
+                e.mode = 'flat'
+                e.timer = 0
+                p.vy = jumpDown ? -6.5 : -4
+                this.addScore(100, e.x, e.y - 8)
+                sound.play('stomp')
+            } else {
+                this.die()
+                return
+            }
+        }
+    }
+
+    // Enemies standing on a block that gets bumped from below are knocked out.
+    private knockEnemiesOn(col: number, row: number) {
+        const top = row * TILE
+        this.enemies.forEach((e) => {
+            if (e.mode !== 'walk' || !e.active) return
+            const onTop = Math.abs(e.y + e.h - top) < 3
+            const above = e.x + e.w > col * TILE && e.x < (col + 1) * TILE
+            if (!onTop || !above) return
+            e.mode = 'knocked'
+            e.vy = -3.5
+            e.vx = e.x + e.w / 2 < (col + 0.5) * TILE ? -1 : 1
+            this.addScore(100, e.x, e.y - 8)
+            sound.play('stomp')
+        })
     }
 
     // ---- Blocks and coins ---------------------------------------------------
@@ -368,6 +610,7 @@ export class Game {
 
         if ('B?AaPp'.includes(tile)) {
             this.bumps.push({ col, row, frame: 0 })
+            this.knockEnemiesOn(col, row)
         }
         switch (tile) {
             case '?':
@@ -397,15 +640,17 @@ export class Game {
 
     private addCoin(col: number, row: number) {
         this.coins++
+        this.score += 200
         this.coinPops.push({ x: col * TILE, y: (row - 1) * TILE, vy: -4, frame: 0 })
         sound.play('coin')
     }
 
     private collectCoins() {
-        overlappingTiles(this.player).forEach(({ col, row }) => {
+        overlappingTiles(this.player, this.level.cols).forEach(({ col, row }) => {
             if (this.level.tiles[row][col] === 'o') {
                 this.level.tiles[row][col] = '.'
                 this.coins++
+                this.score += 200
                 sound.play('coin')
             }
         })
@@ -431,12 +676,16 @@ export class Game {
             c.vy += 0.25
             return ++c.frame < 32
         })
+        this.popups = this.popups.filter((popup) => {
+            popup.y -= 0.6
+            return ++popup.frame < 50
+        })
     }
 
     // ---- Camera -------------------------------------------------------------
 
     private updateCamera(snap: boolean) {
-        const levelWidth = COLS * TILE
+        const levelWidth = this.level.cols * TILE
         const target = this.player.x - this.viewWidth * 0.4
         const max = Math.max(0, levelWidth - this.viewWidth)
         const clamped = Math.max(0, Math.min(max, target))
@@ -446,15 +695,22 @@ export class Game {
     // ---- Drawing ------------------------------------------------------------
 
     private makeStars() {
+        this.stars = []
         let s = 42
-        for (let i = 0; i < 70; i++) {
+        for (let i = 0; i < this.level.cols * 0.6; i++) {
             s = (s * 9301 + 49297) % 233280
-            const x = s % (COLS * TILE)
+            const x = s % (this.level.cols * TILE)
             s = (s * 9301 + 49297) % 233280
             // Spread stars into the extra sky that tall screens show above the level.
             const y = (s % (15 * TILE)) - 6 * TILE
             this.stars.push({ x, y })
         }
+    }
+
+    private visibleCols(camX: number) {
+        const first = Math.max(0, Math.floor(camX / TILE))
+        const last = Math.min(this.level.cols - 1, Math.ceil((camX + this.viewWidth) / TILE))
+        return { first, last }
     }
 
     private draw() {
@@ -483,25 +739,28 @@ export class Game {
         this.level.decor.forEach((d) => this.drawDecor(d))
         this.drawCastle()
         this.drawLabels()
+        this.drawCheckpoint()
 
         const behindPipe = this.state === 'pipeDown' || this.state === 'pipeUp'
         if (behindPipe) this.drawPlayer()
         this.drawTiles(camX)
         this.drawBelowLevel(camX)
         this.drawFlag()
+        this.drawEnemies()
         this.drawCoinPops()
         if (!behindPipe) this.drawPlayer()
+        this.drawPopups()
 
         ctx.setTransform(scale, 0, 0, scale, 0, 0)
-        this.drawHud()
+        if (this.state === 'intro') this.drawIntro()
+        else this.drawHud()
     }
 
     private drawTiles(camX: number) {
         const ctx = this.ctx
         const s = this.sprites
         const tiles = this.level.tiles
-        const first = Math.max(0, Math.floor(camX / TILE))
-        const last = Math.min(COLS - 1, Math.ceil((camX + this.viewWidth) / TILE))
+        const { first, last } = this.visibleCols(camX)
         const coinWidth = Math.abs(Math.cos(this.frame / 12))
 
         for (let row = 0; row < ROWS; row++) {
@@ -568,8 +827,7 @@ export class Game {
         const depth = this.canvas.height / this.scale - this.offsetY - ROWS * TILE
         if (depth <= 0) return
         this.ctx.fillStyle = this.sprites.palette.ground
-        const first = Math.max(0, Math.floor(camX / TILE))
-        const last = Math.min(COLS - 1, Math.ceil((camX + this.viewWidth) / TILE))
+        const { first, last } = this.visibleCols(camX)
         for (let col = first; col <= last; col++) {
             if (this.level.tiles[ROWS - 1][col] === '#') {
                 this.ctx.fillRect(col * TILE, ROWS * TILE, TILE, depth + 1)
@@ -582,11 +840,61 @@ export class Game {
         const p = this.player
         const frames = this.sprites.player
         let frame: keyof typeof frames = 'stand'
-        if (this.state === 'flagSlide') frame = 'jump'
+        if (this.state === 'flagSlide' || this.state === 'dying') frame = 'jump'
         else if (!p.onGround && this.state === 'play') frame = 'jump'
         else if (p.vx !== 0) frame = Math.floor(this.walkFrame) % 2 === 0 ? 'walk1' : 'walk2'
         const sprite = frames[frame][this.facing]
         this.ctx.drawImage(sprite, Math.round(p.x - 2), Math.round(p.y))
+    }
+
+    private drawEnemies() {
+        const ctx = this.ctx
+        const step = Math.floor(this.frame / 10) % 2
+        this.enemies.forEach((e) => {
+            if (!e.active) return
+            let sprite: HTMLCanvasElement
+            if (e.kind === 'spiky') sprite = this.sprites.spiky[e.dir === 1 ? 'right' : 'left'][step]
+            else sprite = e.mode === 'flat' ? this.sprites.blob.flat : this.sprites.blob.walk[step]
+            const x = Math.round(e.x - 2)
+            const y = Math.round(e.y + e.h - TILE)
+            if (e.mode === 'knocked') {
+                // Upside down as it falls away.
+                ctx.save()
+                ctx.translate(x, y + TILE)
+                ctx.scale(1, -1)
+                ctx.drawImage(sprite, 0, 0)
+                ctx.restore()
+            } else {
+                ctx.drawImage(sprite, x, y)
+            }
+        })
+    }
+
+    private drawCheckpoint() {
+        const { checkpointCol } = this.level
+        if (checkpointCol === undefined) return
+        const ctx = this.ctx
+        const p = this.sprites.palette
+        const x = checkpointCol * TILE + 7
+        ctx.fillStyle = p.hardDark
+        ctx.fillRect(x, 10 * TILE, 2, 3 * TILE)
+        // Grey until reached, then gold.
+        ctx.fillStyle = this.checkpointReached ? p.block : '#9a9a9a'
+        for (let i = 0; i < 9; i++) ctx.fillRect(x + 2, 10 * TILE + i, 10 - Math.abs(4 - i) * 2, 1)
+    }
+
+    private drawPopups() {
+        const ctx = this.ctx
+        const p = this.sprites.palette
+        ctx.font = '7px SuperMario256, monospace'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        this.popups.forEach((popup) => {
+            ctx.fillStyle = p.labelShadow
+            ctx.fillText(popup.text, popup.x + 9, popup.y + 1)
+            ctx.fillStyle = p.label
+            ctx.fillText(popup.text, popup.x + 8, popup.y)
+        })
     }
 
     private drawCoinPops() {
@@ -705,9 +1013,28 @@ export class Game {
         })
     }
 
+    // The black "WORLD 1-2" card shown before each life.
+    private drawIntro() {
+        const ctx = this.ctx
+        const width = this.viewWidth
+        const height = this.canvas.height / this.scale
+        ctx.fillStyle = '#000000'
+        ctx.fillRect(0, 0, width, height)
+        ctx.font = '12px SuperMario256, monospace'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = '#ffffff'
+        ctx.fillText(`WORLD ${this.level.name}`, width / 2, height / 2 - 20)
+        ctx.drawImage(this.sprites.player.stand.right, width / 2 - 26, height / 2 - 2)
+        ctx.font = '10px SuperMario256, monospace'
+        ctx.textAlign = 'left'
+        ctx.fillText(`x  ${this.lives}`, width / 2 - 4, height / 2 + 6)
+    }
+
     private drawHud() {
         const ctx = this.ctx
         const p = this.sprites.palette
+        const w = this.viewWidth
         const coins = String(this.coins).padStart(2, '0')
         ctx.font = '9px SuperMario256, monospace'
         ctx.textBaseline = 'top'
@@ -718,17 +1045,33 @@ export class Game {
             ctx.fillStyle = p.label
             ctx.fillText(value, x, y)
         }
+
+        if (this.level.mode === 'challenge') {
+            const middle = w * 0.36
+            text('FRED', 12, 8, 'left')
+            text(String(this.score).padStart(6, '0'), 12, 19, 'left')
+            ctx.drawImage(this.sprites.coin, middle - 12, 8, 8, 8)
+            text(`x ${coins}`, middle, 8, 'left')
+            ctx.drawImage(this.sprites.player.stand.right, middle - 14, 17, 10, 10)
+            text(`x ${this.lives}`, middle, 19, 'left')
+            text('WORLD', w * 0.68, 8, 'center')
+            text(this.level.name, w * 0.68, 19, 'center')
+            text('TIME', w - 12, 8, 'right')
+            text(String(Math.max(0, this.time)), w - 12, 19, 'right')
+            return
+        }
+
         text('FRED', 12, 8, 'left')
         ctx.drawImage(this.sprites.coin, 12, 19, 8, 8)
         text(`x ${coins}`, 22, 19, 'left')
-        text('WORLD', this.viewWidth - 12, 8, 'right')
-        text('1-1', this.viewWidth - 12, 19, 'right')
+        text('WORLD', w - 12, 8, 'right')
+        text(this.level.name, w - 12, 19, 'right')
 
         if (this.state === 'play' && !this.hasMoved) {
             const lines = this.touchMode
                 ? ['HIT THE BLOCKS!', 'DOWN ENTERS PIPES']
                 : ['ARROWS OR A/D TO MOVE   SPACE TO JUMP', 'HIT THE BLOCKS  -  DOWN TO ENTER PIPES']
-            lines.forEach((line, i) => text(line, this.viewWidth / 2, 40 + i * 12, 'center'))
+            lines.forEach((line, i) => text(line, w / 2, 40 + i * 12, 'center'))
         }
     }
 }

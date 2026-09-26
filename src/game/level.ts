@@ -1,7 +1,7 @@
 /*
- * World 1-1: the level layout.
+ * The levels.
  *
- * The level is a grid of 16x16 tiles, 15 rows tall (row 0 is the top, rows 13-14 are the ground).
+ * Each level is a grid of 16x16 tiles, 15 rows tall (row 0 is the top, rows 13-14 are the ground).
  * Each tile is one character:
  *
  *   .  empty                 #  ground
@@ -12,13 +12,17 @@
  *   [ ]  pipe top            { }  pipe body
  *   W  top-left of the pipe you can enter (the "Work" pipe)
  *   o  coin to collect
+ *
+ * World 1-1 is the website: its blocks and pipe open the site's sections, and nothing can hurt you.
+ * World 1-2 is just a game: enemies, pits that cost a life, a timer and a checkpoint.
  */
 
 export const TILE = 16
 export const ROWS = 15
-export const COLS = 112
 
+export type LevelId = 1 | 2
 export type Section = 'about' | 'work' | 'project' | 'contact'
+export type EnemyKind = 'blob' | 'spiky'
 
 export interface Label {
     // Centre of the label, in tiles.
@@ -35,51 +39,86 @@ export interface Decor {
     size: number
 }
 
+export interface EnemySpawn {
+    kind: EnemyKind
+    col: number
+    // The row the enemy stands on (defaults to just above the ground).
+    row?: number
+}
+
 export interface Level {
+    id: LevelId
+    name: string
+    // 'site' levels open the website's sections; 'challenge' levels have enemies, lives and a timer.
+    mode: 'site' | 'challenge'
+    cols: number
     tiles: string[][]
     start: { col: number; row: number }
     flagCol: number
     castleCol: number
+    checkpointCol?: number
+    time?: number
     labels: Label[]
     decor: Decor[]
+    enemies: EnemySpawn[]
 }
 
 const SOLID = 'B?AaPpUX#[]{}W'
 
 export const isSolid = (tile: string | undefined) => tile !== undefined && tile !== '' && SOLID.includes(tile)
 
-export function buildLevel(): Level {
+// An empty grid plus helpers for placing things on it.
+function createGrid(cols: number) {
     const tiles: string[][] = []
     for (let r = 0; r < ROWS; r++) {
-        tiles.push(new Array(COLS).fill('.'))
+        tiles.push(new Array(cols).fill('.'))
     }
 
     const set = (col: number, row: number, tile: string) => {
         tiles[row][col] = tile
     }
-    // Writes a string of tiles left-to-right starting at (col, row). Spaces are skipped.
-    const put = (col: number, row: number, text: string) => {
-        text.split('').forEach((tile, i) => tile !== ' ' && set(col + i, row, tile))
+    return {
+        tiles,
+        set,
+        // Writes a string of tiles left-to-right starting at (col, row). Spaces are skipped.
+        put: (col: number, row: number, text: string) => {
+            text.split('').forEach((tile, i) => tile !== ' ' && set(col + i, row, tile))
+        },
+        ground: (from: number, to: number) => {
+            for (let c = from; c <= to; c++) {
+                set(c, 13, '#')
+                set(c, 14, '#')
+            }
+        },
+        pipe: (col: number, height: number, enterable = false) => {
+            const top = 13 - height
+            set(col, top, enterable ? 'W' : '[')
+            set(col + 1, top, ']')
+            for (let r = top + 1; r < 13; r++) {
+                set(col, r, '{')
+                set(col + 1, r, '}')
+            }
+        },
+        // A staircase of hard blocks. `heights` lists the height of each column, left to right.
+        stairs: (col: number, heights: number[]) => {
+            heights.forEach((height, i) => {
+                for (let r = 13 - height; r <= 12; r++) set(col + i, r, 'X')
+            })
+        },
     }
-    const ground = (from: number, to: number) => {
-        for (let c = from; c <= to; c++) {
-            set(c, 13, '#')
-            set(c, 14, '#')
-        }
-    }
-    const pipe = (col: number, height: number, enterable = false) => {
-        const top = 13 - height
-        set(col, top, enterable ? 'W' : '[')
-        set(col + 1, top, ']')
-        for (let r = top + 1; r < 13; r++) {
-            set(col, r, '{')
-            set(col + 1, r, '}')
-        }
-    }
+}
+
+export function buildLevel(id: LevelId): Level {
+    return id === 1 ? buildWorld1() : buildWorld2()
+}
+
+function buildWorld1(): Level {
+    const cols = 112
+    const { tiles, set, put, ground, pipe, stairs } = createGrid(cols)
 
     // Ground, with one pit to jump over.
     ground(0, 37)
-    ground(41, COLS - 1)
+    ground(41, cols - 1)
 
     // A lone coin block to learn on, then the About Me block.
     put(6, 9, '?')
@@ -106,17 +145,17 @@ export function buildLevel(): Level {
     put(71, 5, '?')
 
     // Staircase up to the flag.
-    for (let i = 0; i < 8; i++) {
-        for (let r = 12 - i; r <= 12; r++) {
-            set(80 + i, r, 'X')
-        }
-    }
+    stairs(80, [1, 2, 3, 4, 5, 6, 7, 8])
 
     // Flagpole base.
     const flagCol = 96
     set(flagCol, 12, 'X')
 
     return {
+        id: 1,
+        name: '1-1',
+        mode: 'site',
+        cols,
         tiles,
         start: { col: 3, row: 12 },
         flagCol,
@@ -145,6 +184,116 @@ export function buildLevel(): Level {
             { kind: 'cloud', col: 68, row: 2, size: 2 },
             { kind: 'cloud', col: 86, row: 1.5, size: 1 },
             { kind: 'cloud', col: 104, row: 2, size: 2 },
+        ],
+        enemies: [],
+    }
+}
+
+function buildWorld2(): Level {
+    const cols = 212
+    const { tiles, set, put, ground, pipe, stairs } = createGrid(cols)
+
+    // Ground in segments; the gaps are pits.
+    ground(0, 68)
+    ground(71, 86)
+    ground(90, 137)
+    ground(140, 162)
+    ground(166, cols - 1)
+
+    // Opening blocks.
+    put(10, 9, '?')
+    put(14, 9, 'B?B?B')
+    put(16, 5, '?')
+
+    // A run of pipes, each taller than the last, with enemies in between.
+    pipe(24, 2)
+    pipe(34, 3)
+    pipe(44, 4)
+    pipe(55, 4)
+    put(60, 8, 'oooo')
+
+    // Over the first pit to a high platform.
+    put(76, 9, 'B?B')
+    put(79, 5, 'BBBBBBBB')
+    put(80, 4, 'oo  oo')
+
+    // Across the second pit.
+    put(92, 5, 'BBB?')
+    put(95, 9, '?')
+    put(100, 9, 'BB')
+
+    // Past the checkpoint: a block triangle.
+    put(112, 9, '?  ?  ?')
+    put(115, 5, '?')
+    put(124, 9, 'B')
+    put(127, 5, 'BBB')
+    put(130, 5, 'B??B')
+
+    // A stair pyramid with a pit in the middle.
+    stairs(134, [1, 2, 3, 4])
+    stairs(140, [4, 3, 2, 1])
+
+    pipe(158, 2)
+    put(162, 8, 'ooo')
+
+    put(168, 9, 'BB?B')
+    put(168, 5, 'oooo')
+    pipe(175, 2)
+
+    // The big staircase to the flag.
+    stairs(180, [1, 2, 3, 4, 5, 6, 7, 8, 8])
+
+    const flagCol = 193
+    set(flagCol, 12, 'X')
+
+    // Background scenery repeats every 48 columns, like the old games.
+    const decor: Decor[] = []
+    for (let base = 0; base < cols; base += 48) {
+        decor.push(
+            { kind: 'hill', col: base, row: 13, size: 3 },
+            { kind: 'hill', col: base + 16, row: 13, size: 2 },
+            { kind: 'bush', col: base + 11, row: 13, size: 3 },
+            { kind: 'bush', col: base + 41, row: 13, size: 1 },
+            { kind: 'cloud', col: base + 8, row: 2, size: 1 },
+            { kind: 'cloud', col: base + 19, row: 1.5, size: 1 },
+            { kind: 'cloud', col: base + 27, row: 2.5, size: 3 },
+            { kind: 'cloud', col: base + 36, row: 1.5, size: 2 }
+        )
+    }
+
+    return {
+        id: 2,
+        name: '1-2',
+        mode: 'challenge',
+        cols,
+        tiles,
+        start: { col: 3, row: 12 },
+        flagCol,
+        castleCol: 198,
+        checkpointCol: 108,
+        time: 300,
+        labels: [],
+        decor,
+        enemies: [
+            { kind: 'blob', col: 21 },
+            { kind: 'blob', col: 30 },
+            { kind: 'blob', col: 40 },
+            { kind: 'blob', col: 41.5 },
+            { kind: 'blob', col: 50 },
+            { kind: 'blob', col: 52 },
+            { kind: 'blob', col: 64 },
+            { kind: 'blob', col: 83, row: 4 },
+            { kind: 'blob', col: 97 },
+            { kind: 'blob', col: 99 },
+            { kind: 'spiky', col: 106 },
+            { kind: 'blob', col: 120 },
+            { kind: 'blob', col: 122 },
+            { kind: 'spiky', col: 128, row: 4 },
+            { kind: 'spiky', col: 148 },
+            { kind: 'blob', col: 152 },
+            { kind: 'blob', col: 154 },
+            { kind: 'blob', col: 170 },
+            { kind: 'spiky', col: 178 },
         ],
     }
 }
