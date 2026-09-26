@@ -58,6 +58,8 @@ interface Boss extends Body {
     timer: number
     // Frames of flashing after being stomped (he can't be hit, or hurt you, meanwhile).
     hurt: number
+    // Frames left of being dazed after a stomp: he can't move or shoot.
+    stun: number
     // Staples left to fire in the current volley.
     burst: number
     shootIn: number
@@ -120,6 +122,9 @@ const BOSS_HP = 5
 const BOSS_WIDTH = 18
 const BOSS_HEIGHT = 40
 const BUG_SPEED = 1.6
+// A stomp dazes The Manager for a second, then he waits a little longer before shooting again.
+const STUN_FRAMES = 60
+const SHOT_DELAY_AFTER_STUN = 60
 const ENEMY_SPEED = 0.5
 // The in-game clock ticks once every 24 frames (0.4 seconds), like the old games.
 const TIME_TICK = 24
@@ -572,6 +577,7 @@ export class Game {
                       mode: 'walk',
                       timer: 0,
                       hurt: 0,
+                      stun: 0,
                       burst: 0,
                       shootIn: 150,
                       jumpIn: 240,
@@ -769,6 +775,21 @@ export class Game {
         const anger = 1 + (BOSS_HP - b.hp) * 0.18
         if (b.hurt > 0) b.hurt--
 
+        // Every so often a bug scuttles across the room (even while he's dazed).
+        if (--this.bugTimer <= 0) {
+            this.spawnBug()
+            this.bugTimer = 300 + Math.random() * 220
+        }
+
+        if (b.stun > 0) {
+            // Dazed: stands still (but still falls if he was mid-jump).
+            b.stun--
+            b.vx = 0
+            b.vy = Math.min(b.vy + PHYSICS.gravity, PHYSICS.maxFall)
+            moveBody(b, this.level.tiles)
+            return
+        }
+
         if (--b.tauntIn <= 0) {
             this.say(this.pick(TAUNTS, b.taunt))
             b.tauntIn = 420 + Math.random() * 300
@@ -804,12 +825,6 @@ export class Game {
         b.vy = Math.min(b.vy + PHYSICS.gravity, PHYSICS.maxFall)
         moveBody(b, this.level.tiles)
         if (b.mode === 'walk' && b.vx === 0) b.dir = b.dir === 1 ? -1 : 1
-
-        // Every so often a bug scuttles across the room.
-        if (--this.bugTimer <= 0) {
-            this.spawnBug()
-            this.bugTimer = 300 + Math.random() * 220
-        }
     }
 
     private fireStaple(b: Boss) {
@@ -873,6 +888,12 @@ export class Game {
         // Stomped on his head.
         b.hp--
         b.hurt = 90
+        // Dazed for a second: cancel any volley he was lining up, and hold off his next shot.
+        b.stun = STUN_FRAMES
+        b.mode = 'walk'
+        b.burst = 0
+        b.vx = 0
+        b.shootIn = Math.max(b.shootIn, SHOT_DELAY_AFTER_STUN)
         p.vy = jumpDown ? -7 : -5.5
         this.addScore(1000, b.x, b.y - 8)
         sound.play('bossHit')
@@ -1417,6 +1438,8 @@ export class Game {
     private drawBoss() {
         const b = this.boss
         if (!b) return
+        // Dizzy stars stay steady even while he flashes.
+        if (b.stun > 0) this.drawDizzyStars(Math.round(b.x + 9), Math.round(b.y + b.h - 44))
         // Flash after being stomped.
         if (b.hurt > 0 && Math.floor(b.hurt / 4) % 2 === 0) return
         const ctx = this.ctx
@@ -1437,6 +1460,22 @@ export class Game {
         ctx.drawImage(sprite, x, y)
         if (b.mode === 'aim') {
             ctx.drawImage(this.sprites.stapler[facing], facing === 'right' ? x + 20 : x - 8, y + 19)
+        }
+    }
+
+    // Little stars circling his head while he's dazed.
+    private drawDizzyStars(cx: number, cy: number) {
+        const ctx = this.ctx
+        for (let i = 0; i < 3; i++) {
+            const angle = this.frame * 0.15 + (i * Math.PI * 2) / 3
+            const x = Math.round(cx + Math.cos(angle) * 10)
+            const y = Math.round(cy + Math.sin(angle) * 3)
+            ctx.fillStyle = '#1a1a1a'
+            ctx.fillRect(x - 2, y - 1, 5, 3)
+            ctx.fillRect(x - 1, y - 2, 3, 5)
+            ctx.fillStyle = '#ffe040'
+            ctx.fillRect(x - 1, y, 3, 1)
+            ctx.fillRect(x, y - 1, 1, 3)
         }
     }
 
