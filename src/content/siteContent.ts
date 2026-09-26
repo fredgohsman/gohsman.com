@@ -52,13 +52,13 @@ export interface SiteContent {
 
 export const siteContent: SiteContent = {
     name: 'Fred Gohsman',
-    tagline: 'Software Craftsman',
+    tagline: 'Engineering leader, builder, occasional gamer.',
     about: {
         heading: 'About Me',
         paragraphs: [
-            'Hello player!  You are playing as Fred, a professional software engineer, architect, an AI maestro with over 25 years in the industry.',
-            'I have spent time in product development, consulting, a couple years at Microsoft, and most recently transforming the BankFabric development team into a mean lean AI code crunching machine.',
-            'My hub is in southwest Florida but I can often be found all around the world working, traveling, integrating.  Besides being a professional software engineer for over 25 years, I dabble in game development, woodworking, and horticulture.',
+            'Hello player!  Welcome to my site.  Have fun and learn a little bit about me in the process.',
+            'I am Fred Gohsman, a professional software engineer, architect, and AI maestro with over 25 years in the industry.  I have spent time in product development, consulting, a couple years at Microsoft, and most recently transforming the BankFabric development team at Truvio into a mean lean AI code crunching machine.',
+            'My hub is in southwest Florida but I can often be found all around the world working, traveling, integrating. Besides being a professional software engineer for over 25 years, I dabble in game development, woodworking, and horticulture.',
         ],
     },
     work: {
