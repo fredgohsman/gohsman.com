@@ -1,0 +1,92 @@
+.info-panel-backdrop {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.35);
+    z-index: 10;
+}
+
+/* A dialog box in the style of an old console game: black box, double white border. */
+.info-panel {
+    position: relative;
+    width: min(560px, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 1.5rem 1.5rem 1rem;
+    background: #000;
+    color: #fff;
+    border: 4px double #fff;
+    outline: 4px solid #000;
+    border-radius: 6px;
+    box-shadow: 0 8px 0 rgba(0, 0, 0, 0.35);
+    animation: info-panel-pop 0.18s ease-out;
+}
+
+.info-panel .site-section h2 {
+    color: #f8b800;
+}
+
+@keyframes info-panel-pop {
+    from {
+        transform: scale(0.85);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .info-panel {
+        animation: none;
+    }
+}
+
+.info-panel-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 1.25rem;
+    cursor: pointer;
+}
+
+.info-panel-continue {
+    display: block;
+    margin: 0.5rem auto 0;
+    font-family: SuperMario256, sans-serif;
+    font-size: 1rem;
+    background: #e0302a;
+    color: #fff;
+    border: 3px solid #fff;
+    border-radius: 4px;
+    padding: 0.4rem 1.2rem;
+    cursor: pointer;
+}
+
+.info-panel-continue:hover {
+    background: #ff4a40;
+}
+
+.info-panel:focus {
+    outline: 4px solid #000;
+}
+
+.info-panel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.info-panel-actions .info-panel-continue {
+    margin: 0;
+}
