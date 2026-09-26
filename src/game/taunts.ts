@@ -27,6 +27,10 @@ export const TAUNTS = [
 // Said when you stomp on him.
 export const HIT_LINES = ['Ow! HR will hear about this.', 'Mmm... that is a problem.', 'Noted. For your review.', 'Let us not do that.']
 
+// The banana easter egg: squash 5 bugs in his office and you get a banana to throw.
+export const BANANA_SPOTTED_LINE = 'Is that... a banana? Put that away.'
+export const SLIP_LINE = 'Whoa! Who left this here?!'
+
 // Said at the start of the fight, and when he's beaten.
 export const OPENING_LINE = 'Yeah... hi. So, about those TPS reports.'
 export const DEFEAT_LINE = "I'll just... go ahead and... pack my things."

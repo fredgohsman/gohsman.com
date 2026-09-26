@@ -11,9 +11,9 @@ import { Body, PHYSICS, moveBody, overlappingTiles, overlaps } from './physics'
 import { Sprites, Theme, buildSprites, shade } from './sprites'
 import { sound } from './sound'
 import { Track, music } from './music'
-import { DEFEAT_LINE, HIT_LINES, OPENING_LINE, TAUNTS } from './taunts'
+import { BANANA_SPOTTED_LINE, DEFEAT_LINE, HIT_LINES, OPENING_LINE, SLIP_LINE, TAUNTS } from './taunts'
 
-export type Control = 'left' | 'right' | 'up' | 'down' | 'jump' | 'run'
+export type Control = 'left' | 'right' | 'up' | 'down' | 'jump' | 'run' | 'throw'
 
 export interface RunResult {
     level: LevelId
@@ -24,6 +24,8 @@ export interface RunResult {
 export interface GameCallbacks {
     onOpen: (section: Section, projectIndex?: number) => void
     onLevelComplete: (result: RunResult) => void
+    // How many bananas the player is holding (the boss-level easter egg), so the phone controls can show a throw button.
+    onBananas?: (count: number) => void
     onGameOver: (result: RunResult) => void
 }
 
@@ -67,6 +69,12 @@ interface Boss extends Body {
     tauntIn: number
     taunt: string
     tauntFrames: number
+}
+
+// A thrown banana: arcs through the air, then lies on the floor as a peel.
+interface Banana extends Body {
+    landed: boolean
+    dead: boolean
 }
 
 interface Staple {
@@ -125,6 +133,9 @@ const BUG_SPEED = 1.6
 // A stomp dazes The Manager for a second, then he waits a little longer before shooting again.
 const STUN_FRAMES = 60
 const SHOT_DELAY_AFTER_STUN = 60
+// Easter egg: squashing this many bugs in the boss's office earns a banana. Slipping on it dazes him longer.
+const BUGS_PER_BANANA = 5
+const SLIP_STUN_FRAMES = 100
 const ENEMY_SPEED = 0.5
 // The in-game clock ticks once every 24 frames (0.4 seconds), like the old games.
 const TIME_TICK = 24
@@ -142,6 +153,8 @@ const KEY_MAP: Record<string, Control> = {
     ShiftLeft: 'run',
     ShiftRight: 'run',
     KeyX: 'run',
+    KeyF: 'throw',
+    KeyC: 'throw',
 }
 
 export class Game {
@@ -161,8 +174,10 @@ export class Game {
         down: false,
         jump: false,
         run: false,
+        throw: false,
     }
     private jumpWasDown = false
+    private throwWasDown = false
     private hasMoved = false
     private touchMode = false
 
@@ -190,6 +205,10 @@ export class Game {
     private boss: Boss | null = null
     private staples: Staple[] = []
     private bugTimer = 0
+    private bananas = 0
+    private bugsSquashed = 0
+    private thrown: Banana[] = []
+    private bananaHint = 0
     private popups: Popup[] = []
     private bumps: Bump[] = []
     private coinPops: CoinPop[] = []
@@ -365,6 +384,7 @@ export class Game {
                     this.updateItems()
                     this.updateBoss()
                     this.updateStaples()
+                    this.updateBananas()
                 }
                 break
             case 'grow':
@@ -560,6 +580,10 @@ export class Game {
         this.debris = []
         this.staples = []
         this.bugTimer = 240
+        this.bugsSquashed = 0
+        this.thrown = []
+        this.bananaHint = 0
+        this.setBananas(0)
         const { bossCol } = this.level
         this.boss =
             bossCol === undefined
@@ -737,6 +761,7 @@ export class Game {
                 p.vy = jumpDown ? -6.5 : -4
                 this.addScore(100, e.x, e.y - 8)
                 sound.play('stomp')
+                this.countBug()
             } else {
                 this.hurt()
                 if (this.state !== 'play') return
@@ -886,19 +911,23 @@ export class Game {
             return
         }
         // Stomped on his head.
+        p.vy = jumpDown ? -7 : -5.5
+        this.damageBoss(b, STUN_FRAMES, this.pick(HIT_LINES))
+    }
+
+    // Takes one health from The Manager and dazes him: cancels any volley and holds off his next shot.
+    private damageBoss(b: Boss, stunFrames: number, line: string) {
         b.hp--
         b.hurt = 90
-        // Dazed for a second: cancel any volley he was lining up, and hold off his next shot.
-        b.stun = STUN_FRAMES
+        b.stun = stunFrames
         b.mode = 'walk'
         b.burst = 0
         b.vx = 0
         b.shootIn = Math.max(b.shootIn, SHOT_DELAY_AFTER_STUN)
-        p.vy = jumpDown ? -7 : -5.5
         this.addScore(1000, b.x, b.y - 8)
         sound.play('bossHit')
         if (b.hp > 0) {
-            this.say(this.pick(HIT_LINES), 120)
+            this.say(line, 120)
             return
         }
         b.mode = 'defeated'
@@ -910,6 +939,69 @@ export class Game {
         this.enemies = []
         music.stop()
         sound.play('flag')
+    }
+
+    // ---- The banana easter egg -------------------------------------------------
+
+    private setBananas(count: number) {
+        this.bananas = count
+        this.callbacks.onBananas?.(count)
+    }
+
+    private countBug() {
+        if (!this.boss || this.boss.mode === 'defeated') return
+        if (++this.bugsSquashed % BUGS_PER_BANANA !== 0) return
+        this.setBananas(this.bananas + 1)
+        this.bananaHint = 240
+        const p = this.player
+        this.popups.push({ x: p.x - 8, y: p.y - 12, text: 'BANANA!', frame: 0 })
+        sound.play('powerup')
+        this.say(BANANA_SPOTTED_LINE, 150)
+    }
+
+    private throwBanana() {
+        const p = this.player
+        this.setBananas(this.bananas - 1)
+        this.thrown.push({
+            x: p.x + (this.facing === 'right' ? p.w : -12),
+            y: p.y + p.h - 20,
+            w: 12,
+            h: 8,
+            vx: this.facing === 'right' ? 2.6 : -2.6,
+            vy: -3.5,
+            onGround: false,
+            landed: false,
+            dead: false,
+        })
+        sound.play('sprout')
+    }
+
+    private updateBananas() {
+        const throwDown = this.controls.throw
+        if (throwDown && !this.throwWasDown && this.bananas > 0) this.throwBanana()
+        this.throwWasDown = throwDown
+        if (this.bananaHint > 0) this.bananaHint--
+
+        const b = this.boss
+        this.thrown.forEach((banana) => {
+            if (!banana.landed) {
+                banana.vy = Math.min(banana.vy + 0.3, PHYSICS.maxFall)
+                moveBody(banana, this.level.tiles)
+                if (banana.onGround) {
+                    banana.landed = true
+                    banana.vx = 0
+                }
+                return
+            }
+            // A peel on the floor: The Manager slips if he walks onto it.
+            if (!b || b.mode === 'defeated' || b.stun > 0 || b.hurt > 0 || !b.onGround) return
+            const feet = { x: b.x + 3, y: b.y + b.h - 4, w: b.w - 6, h: 4, vx: 0, vy: 0, onGround: true }
+            if (!overlaps(feet, banana)) return
+            banana.dead = true
+            this.popups.push({ x: b.x, y: b.y - 8, text: 'SLIP!', frame: 0 })
+            this.damageBoss(b, SLIP_STUN_FRAMES, SLIP_LINE)
+        })
+        this.thrown = this.thrown.filter((banana) => !banana.dead)
     }
 
     // ---- Coffee and broken bricks -------------------------------------------
@@ -993,6 +1085,7 @@ export class Game {
             e.vx = e.x + e.w / 2 < (col + 0.5) * TILE ? -1 : 1
             this.addScore(100, e.x, e.y - 8)
             sound.play('stomp')
+            if (e.kind === 'bug') this.countBug()
         })
     }
 
@@ -1191,6 +1284,7 @@ export class Game {
         this.drawBoss()
         this.drawEnemies()
         this.drawStaples()
+        this.drawBananas()
         this.drawCoinPops()
         this.drawDebris()
         if (!behindPipe) this.drawPlayer()
@@ -1477,6 +1571,23 @@ export class Game {
             ctx.fillRect(x - 1, y, 3, 1)
             ctx.fillRect(x, y - 1, 1, 3)
         }
+    }
+
+    private drawBananas() {
+        this.thrown.forEach((banana) => {
+            const x = Math.round(banana.x - 2)
+            const y = Math.round(banana.y + banana.h - TILE)
+            if (banana.landed) {
+                this.ctx.drawImage(this.sprites.peel, x, y)
+                return
+            }
+            // Spin while flying.
+            this.ctx.save()
+            this.ctx.translate(x + 8, y + 8)
+            this.ctx.rotate(this.frame * 0.3)
+            this.ctx.drawImage(this.sprites.banana, -8, -8)
+            this.ctx.restore()
+        })
     }
 
     private drawStaples() {
@@ -1830,6 +1941,13 @@ export class Game {
             text(`x ${coins}`, middle, 8, 'left')
             ctx.drawImage(this.sprites.player.stand.right, middle - 14, 17, 10, 10)
             text(`x ${this.lives}`, middle, 19, 'left')
+            if (this.bananas > 0) {
+                ctx.drawImage(this.sprites.banana, middle + 26, 12, 12, 12)
+                text(`x ${this.bananas}`, middle + 40, 14, 'left')
+            }
+            if (this.bananaHint > 0) {
+                text(this.touchMode ? 'TAP THE BANANA TO THROW IT' : 'PRESS F TO THROW THE BANANA', w / 2, 58, 'center')
+            }
             text('WORLD', w * 0.68, 8, 'center')
             text(this.level.name, w * 0.68, 19, 'center')
             text('TIME', w - 12, 8, 'right')

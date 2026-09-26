@@ -9,6 +9,8 @@ interface IProps {
 interface ControlsProps extends IProps {
     running: boolean
     onToggleRun: () => void
+    // Shows the banana button (the boss-level easter egg).
+    canThrow: boolean
 }
 
 interface ButtonProps extends IProps {
@@ -48,7 +50,7 @@ const TouchButton = ({ control, label, className, onControl }: ButtonProps) => {
 
 // On-screen buttons for phones and tablets.
 // Run is a toggle rather than a hold, because one thumb can't hold Run and press Jump at once.
-export const TouchControls = ({ onControl, running, onToggleRun }: ControlsProps) => {
+export const TouchControls = ({ onControl, running, onToggleRun, canThrow }: ControlsProps) => {
     // The game releases every control when a panel closes; re-apply Run whenever the buttons reappear.
     useEffect(() => {
         onControl('run', running)
@@ -62,6 +64,7 @@ export const TouchControls = ({ onControl, running, onToggleRun }: ControlsProps
                 <TouchButton control="right" label="▶" onControl={onControl} />
             </div>
             <div className="touch-actions">
+                {canThrow && <TouchButton control="throw" label="🍌" className="touch-throw" onControl={onControl} />}
                 <button
                     type="button"
                     className={`touch-button touch-run ${running ? 'touch-run-on' : ''}`}

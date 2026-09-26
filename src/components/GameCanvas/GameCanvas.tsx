@@ -59,6 +59,7 @@ export const GameCanvas = ({ started }: IProps) => {
     const [foundProjects, setFoundProjects] = useState<number[]>([])
     const [touch] = useState(isTouchDevice)
     const [running, setRunning] = useState(false)
+    const [bananas, setBananas] = useState(0)
 
     useEffect(() => {
         const canvas = canvasRef.current
@@ -74,6 +75,7 @@ export const GameCanvas = ({ started }: IProps) => {
             },
             onLevelComplete: (result) => setRunEnd({ ...result, outcome: 'clear' }),
             onGameOver: (result) => setRunEnd({ ...result, outcome: 'gameover' }),
+            onBananas: setBananas,
         })
         gameRef.current = game
         game.start()
@@ -126,7 +128,12 @@ export const GameCanvas = ({ started }: IProps) => {
         <div className="game-canvas">
             <canvas ref={canvasRef} aria-hidden="true" />
             {started && touch && !panel && !runEnd && (
-                <TouchControls onControl={onControl} running={running} onToggleRun={() => setRunning((r) => !r)} />
+                <TouchControls
+                    onControl={onControl}
+                    running={running}
+                    onToggleRun={() => setRunning((r) => !r)}
+                    canThrow={bananas > 0}
+                />
             )}
             {panel && (
                 <InfoPanel

@@ -65,3 +65,12 @@
     text-shadow: none;
     box-shadow: 0 0 10px rgba(248, 184, 0, 0.9);
 }
+
+/* The banana throw button (boss-level easter egg). */
+.touch-throw {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 4px;
+    background: rgba(248, 216, 48, 0.8);
+    font-size: 24px;
+}

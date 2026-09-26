@@ -499,6 +499,21 @@ const BOSS_FRAMES: Record<BossFrame, string[]> = {
     aim: grid([...BOSS_HEAD, ...BOSS_COLLAR, ...BOSS_ARMS_AIM, ...BOSS_WAIST, ...BOSS_LEGS_STAND], 44, 24),
 }
 
+// The easter-egg banana, and its peel once it lands.
+const BANANA = grid([
+    '...........k....',
+    '..........YY....',
+    '..........YYy...',
+    '.........YYYy...',
+    '........YYYYy...',
+    '.......YYYYy....',
+    '..Y..YYYYYy.....',
+    '..yYYYYYYy......',
+    '...yyyyyy.......',
+])
+const PEEL = grid(['......k.........', '.....YYY........', '..YYYYyYYYYY....', '.YyyYYYYYyyYY...', 'YY...yyyy...YY..'])
+const BANANA_COLORS: Record<string, string> = { Y: '#f8d830', y: '#c8a018', k: '#5a3a14' }
+
 const STAPLER = grid(['.TTTTTTTTTT.', 'TttttttttttT', 'TTTTTTTTTTTT', '..TT....TT..', '.TTTTTTTTTTT'], 5, 12)
 const STAPLER_COLORS: Record<string, string> = { T: '#2a2a32', t: '#b8b8c8' }
 
@@ -729,6 +744,8 @@ export interface Sprites {
     shredder: { right: [Canvas, Canvas]; left: [Canvas, Canvas] }
     boss: Record<BossFrame, Facing>
     stapler: Facing
+    banana: Canvas
+    peel: Canvas
 }
 
 function facing(rows: string[], colors: Record<string, string>): Facing {
@@ -778,5 +795,7 @@ export function buildSprites(theme: Theme): Sprites {
             aim: facing(BOSS_FRAMES.aim, BOSS_COLORS),
         },
         stapler: facing(STAPLER, STAPLER_COLORS),
+        banana: sprite(BANANA, BANANA_COLORS),
+        peel: sprite(PEEL, BANANA_COLORS),
     }
 }
