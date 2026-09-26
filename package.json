@@ -9,6 +9,7 @@
         "web-vitals": "^2.1.4"
     },
     "devDependencies": {
+        "@babel/plugin-proposal-private-property-in-object": "^7.21.11",
         "@babel/plugin-transform-private-property-in-object": "^7.22.11",
         "@testing-library/jest-dom": "^5.16.5",
         "@testing-library/react": "^13.4.0",
@@ -17,7 +18,6 @@
         "@types/node": "^16.18.34",
         "@types/react": "^18.2.8",
         "@types/react-dom": "^18.2.4",
-        "gh-pages": "^5.0.0",
         "react-scripts": "^5.0.1",
         "typescript": "^4.9.5"
     },
@@ -26,8 +26,7 @@
         "build": "react-scripts build",
         "test": "react-scripts test",
         "eject": "react-scripts eject",
-        "predeploy": "yarn build",
-        "deploy": "yarn predeploy && gh-pages -d build"
+        "postbuild": "node -e \"require('fs').copyFileSync('build/index.html','build/404.html')\""
     },
     "eslintConfig": {
         "extends": "react-app"
@@ -36,7 +35,7 @@
         "defaults",
         "not IE 11"
     ],
-    "homepage": "https://githubusername.github.io",
+    "homepage": "https://gohsman.com",
     "resolutions": {
         "nth-check": "2.0.1"
     },
