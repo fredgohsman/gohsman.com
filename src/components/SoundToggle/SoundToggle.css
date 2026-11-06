@@ -1,0 +1,10 @@
+.sound-toggle {
+    cursor: pointer;
+    border: none;
+    border-radius: 9999px;
+    background-color: rgb(243 244 246);
+    color: rgb(107 114 128);
+    padding: 0.25rem 1rem;
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+}

@@ -1,5 +1,3 @@
-import './Content.css'
-
 import { ReactNode } from 'react'
 import './Content.css'
 

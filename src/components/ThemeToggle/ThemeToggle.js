@@ -12,18 +12,17 @@ export const ThemeToggle = () => {
     const { theme, setTheme } = React.useContext(ThemeContext)
 
     return (
-        <div
+        <button
+            type="button"
             className="theme-toggle"
-            onClick={() => {
-                console.log('theme', theme)
-                setTheme(theme === 'dark' ? 'light' : 'dark')
-            }}
+            aria-label={theme === 'dark' ? 'Switch to day' : 'Switch to night'}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         >
             {theme === 'dark' ? (
                 <i className="switch-dark la la-moon" />
             ) : (
                 <i className="switch-light la la-sun" />
             )}
-        </div>
+        </button>
     )
 }

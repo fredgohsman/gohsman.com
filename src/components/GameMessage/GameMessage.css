@@ -1,0 +1,29 @@
+.game-message {
+    text-align: center;
+    width: min(420px, 100%);
+}
+
+.game-message h2 {
+    font-family: SuperMario256, sans-serif;
+    font-weight: normal;
+    color: #f8b800;
+    font-size: 1.8rem;
+    margin: 0 0 0.75rem;
+}
+
+.game-message p {
+    margin: 0.3rem 0;
+    font-size: 1.1rem;
+}
+
+.game-message-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.game-message-actions .info-panel-continue {
+    margin: 0;
+}

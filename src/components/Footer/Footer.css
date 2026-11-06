@@ -1,27 +1,41 @@
+/* Colours match the game's ground (see palettes in src/game/sprites.ts), so the footer reads as more ground. */
 .app-footer {
     flex: initial;
     display: flex;
     justify-content: center;
-    align-items: flex-end;
-    min-height: 60px;
-    background-size: auto 60px;
+    align-items: center;
+    min-height: 44px;
     text-shadow: #000 1px 0 5px;
-    transition-property: background-image, color, text-shadow;
+    transition-property: background-color, color, text-shadow;
     transition-duration: 1s;
 }
 
 .light .app-footer {
-    background-image: url('ground-grass-dirt-tile.png');
+    background-color: #c67c3c;
     color: yellow;
     text-shadow: #000 1px 0 5px;
 }
 
 .dark .app-footer {
-    background-image: url('ground-stone-gray-tile.png');
+    background-color: #5a5a5a;
     color: white;
     text-shadow: red 1px 0 5px;
 }
 
 .app-footer .content {
-    padding-bottom: 5px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.25rem 1.25rem;
+    padding: 6px 16px;
+}
+
+.app-footer a {
+    color: inherit;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.app-footer a:hover {
+    text-decoration: underline;
 }

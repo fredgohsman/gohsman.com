@@ -3,6 +3,8 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
     transition-property: background-color, color;
     transition-duration: 1s;
 }

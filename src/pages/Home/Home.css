@@ -1,0 +1,87 @@
+.home {
+    position: absolute;
+    inset: 0;
+}
+
+.title-screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 5;
+}
+
+.title-box {
+    background: rgba(0, 0, 0, 0.72);
+    color: #fff;
+    border: 4px double #fff;
+    border-radius: 8px;
+    padding: 1.5rem 2rem;
+    max-width: 520px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.title-name {
+    font-size: clamp(1.8rem, 7vw, 3.2rem);
+    /* The name letters are coloured only in day mode; give them colour at night too. */
+    color: #f8b800;
+    text-shadow: 3px 3px 0 #000;
+}
+
+.title-tagline {
+    margin: 0.5rem 0 1.25rem;
+    opacity: 0.85;
+}
+
+.title-start {
+    font-family: SuperMario256, sans-serif;
+    font-size: 1.4rem;
+    background: #e0302a;
+    color: #fff;
+    border: 3px solid #fff;
+    border-radius: 6px;
+    padding: 0.5rem 1.5rem;
+    cursor: pointer;
+    animation: title-blink 1.2s steps(2, start) infinite;
+}
+
+.title-start:hover,
+.title-start:focus-visible {
+    background: #ff4a40;
+    animation: none;
+}
+
+@keyframes title-blink {
+    50% {
+        opacity: 0.6;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .title-start {
+        animation: none;
+    }
+}
+
+.title-help {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin: 1rem 0 0.5rem;
+}
+
+.title-skip {
+    color: #fff;
+    font-size: 0.9rem;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}

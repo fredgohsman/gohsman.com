@@ -1,0 +1,39 @@
+.plain-view {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    padding: 24px 16px;
+    box-sizing: border-box;
+}
+
+.plain-card {
+    max-width: 720px;
+    margin: 0 auto;
+    background: rgba(255, 255, 255, 0.92);
+    color: #1a1a1a;
+    border: 4px solid #3a1c00;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-sizing: border-box;
+}
+
+.dark .plain-card {
+    background: rgba(12, 16, 48, 0.92);
+    color: #f0f0f0;
+    border-color: #6a9ae8;
+}
+
+.plain-card .site-section {
+    margin-bottom: 1.5rem;
+}
+
+.plain-tagline {
+    font-size: 1.1rem;
+    font-weight: bold;
+    margin-top: 0;
+}
+
+.plain-play {
+    color: inherit;
+    font-family: SuperMario256, sans-serif;
+}

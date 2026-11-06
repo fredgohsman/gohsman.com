@@ -1,0 +1,76 @@
+.touch-controls {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 0 16px;
+    pointer-events: none;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.touch-pad {
+    display: flex;
+    gap: 8px;
+}
+
+.touch-button {
+    pointer-events: auto;
+    touch-action: none;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: 3px solid rgba(0, 0, 0, 0.6);
+    background: rgba(255, 255, 255, 0.35);
+    color: #fff;
+    font-size: 22px;
+    text-shadow: 0 1px 2px #000;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.touch-button:active {
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.touch-jump {
+    width: 72px;
+    height: 72px;
+    background: rgba(224, 48, 42, 0.7);
+    font-family: SuperMario256, sans-serif;
+}
+
+.touch-actions {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+}
+
+/* Run: a toggle that lights up while on. */
+.touch-run {
+    width: 52px;
+    height: 52px;
+    font-family: SuperMario256, sans-serif;
+    font-size: 13px;
+    margin-bottom: 4px;
+}
+
+.touch-run-on {
+    background: rgba(248, 184, 0, 0.85);
+    border-color: #fff;
+    color: #3a1c00;
+    text-shadow: none;
+    box-shadow: 0 0 10px rgba(248, 184, 0, 0.9);
+}
+
+/* The banana throw button (boss-level easter egg). */
+.touch-throw {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 4px;
+    background: rgba(248, 216, 48, 0.8);
+    font-size: 24px;
+}
