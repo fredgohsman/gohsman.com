@@ -1,0 +1,1197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bronco Dash</title>
+<meta name="description" content="Bronco Dash - a learning game for Mary Bryant Elementary Broncos.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1A437E;
+    --navy-dark: #0F2B55;
+    --gold: #F2B630;
+    --gold-dark: #C98F0A;
+    --cream: #FFF8E7;
+    --ink: #1d2433;
+    --green: #2E9D5B;
+    --red: #D64545;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: radial-gradient(circle at 50% 0%, #2a5aa0 0%, var(--navy-dark) 70%);
+    font-family: "Baloo 2", "Trebuchet MS", system-ui, sans-serif;
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 12px 16px 24px;
+  }
+  header {
+    width: min(100%, 1100px);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #fff;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  header h1 { margin: 0; font-size: clamp(1.2rem, 3vw, 1.8rem); line-height: 1.1; }
+  header h1 span { color: var(--gold); }
+  header .sub { font-size: .95rem; opacity: .85; }
+  .icon-btn {
+    background: rgba(255,255,255,.12);
+    color: #fff;
+    border: 2px solid rgba(255,255,255,.35);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .icon-btn:hover { background: rgba(255,255,255,.22); }
+  #stage { position: relative; width: min(100%, 1100px); }
+  canvas {
+    width: 100%;
+    aspect-ratio: 960 / 420;
+    display: block;
+    border-radius: 18px;
+    border: 5px solid var(--gold);
+    box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    touch-action: manipulation;
+    cursor: pointer;
+    background: #bfe6fb;
+  }
+  .hint { color: #dbe6f7; text-align: center; margin-top: 10px; font-size: 1rem; }
+  .hint kbd {
+    background: var(--gold); color: var(--navy-dark); border-radius: 6px;
+    padding: 0 8px; font-family: inherit; font-weight: 800;
+  }
+
+  /* Pop-up screens */
+  .overlay {
+    position: fixed; inset: 0;
+    display: none;
+    align-items: center; justify-content: center;
+    background: rgba(10, 28, 58, .62);
+    padding: 16px;
+    z-index: 10;
+  }
+  .overlay.show { display: flex; }
+  .card {
+    background: var(--cream);
+    border: 6px solid var(--gold);
+    border-radius: 24px;
+    padding: 20px 26px 24px;
+    width: min(100%, 680px);
+    max-height: 100%;
+    overflow: auto;
+    box-shadow: 0 16px 40px rgba(0,0,0,.4);
+    animation: pop .25s ease-out;
+  }
+  @keyframes pop { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .card h2 { margin: 0 0 4px; color: var(--navy); font-size: clamp(1.6rem, 4vw, 2.3rem); line-height: 1.1; }
+  .card p { margin: 6px 0; font-size: 1.1rem; }
+  .title-badge { text-align: center; }
+  .title-badge .big { font-size: 64px; line-height: 1; }
+  .title-badge .school { color: var(--navy); font-weight: 800; letter-spacing: .5px; text-transform: uppercase; font-size: 1rem; }
+  .title-badge h2 { font-size: clamp(2.2rem, 7vw, 3.4rem); }
+  .title-badge h2 span { color: var(--gold-dark); }
+  label.field { display: block; font-weight: 800; color: var(--navy); margin-top: 14px; font-size: 1.1rem; }
+  input[type=text] {
+    width: 100%; font: inherit; font-size: 1.3rem; padding: 8px 14px;
+    border: 3px solid var(--navy); border-radius: 14px; margin-top: 4px; background: #fff;
+  }
+  .subjects { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-top: 6px; }
+  .subjects label {
+    display: flex; align-items: center; gap: 8px; background: #fff;
+    border: 3px solid #d9d2bf; border-radius: 14px; padding: 6px 10px; cursor: pointer; font-weight: 700;
+  }
+  .subjects input { width: 20px; height: 20px; accent-color: var(--navy); }
+  .subjects label:has(input:checked) { border-color: var(--navy); background: #eaf1fb; }
+  .howto { background: #fff; border-radius: 14px; padding: 10px 14px; margin-top: 14px; border: 2px dashed var(--gold-dark); }
+  .howto ul { margin: 4px 0 0; padding-left: 22px; font-size: 1.05rem; }
+  .btn {
+    display: inline-block; font: inherit; font-weight: 800; font-size: 1.35rem;
+    background: var(--gold); color: var(--navy-dark);
+    border: none; border-bottom: 5px solid var(--gold-dark);
+    border-radius: 16px; padding: 10px 26px; cursor: pointer;
+  }
+  .btn:hover { filter: brightness(1.06); }
+  .btn:active { transform: translateY(2px); border-bottom-width: 3px; }
+  .btn.navy { background: var(--navy); color: #fff; border-bottom-color: var(--navy-dark); }
+  .btn.ghost { background: #fff; color: var(--navy); border: 3px solid var(--navy); border-bottom-width: 5px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 16px; }
+  .error { color: var(--red); font-weight: 800; min-height: 1.4em; margin: 6px 0 0; }
+
+  /* Question screen */
+  .station {
+    display: flex; align-items: center; gap: 12px; color: #fff;
+    border-radius: 16px; padding: 8px 14px; margin: -4px -6px 12px;
+  }
+  .station .ico { font-size: 40px; line-height: 1; }
+  .station .nm { font-size: 1.4rem; font-weight: 800; line-height: 1.1; }
+  .station .sb { font-size: .95rem; opacity: .95; }
+  .station .ct { margin-left: auto; font-weight: 800; background: rgba(255,255,255,.25); border-radius: 999px; padding: 2px 12px; white-space: nowrap; }
+  .question { font-size: clamp(1.3rem, 3.4vw, 1.7rem); font-weight: 700; color: var(--ink); margin: 4px 0 14px; line-height: 1.25; }
+  .answers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 520px) { .answers { grid-template-columns: 1fr; } }
+  .answers button {
+    font: inherit; font-size: 1.25rem; font-weight: 700; text-align: left;
+    background: #fff; color: var(--ink);
+    border: 3px solid var(--navy); border-bottom-width: 6px; border-radius: 16px;
+    padding: 10px 14px; cursor: pointer; display: flex; gap: 10px; align-items: center;
+  }
+  .answers button .k {
+    flex: none; width: 32px; height: 32px; border-radius: 50%;
+    background: var(--navy); color: #fff; display: grid; place-items: center; font-size: 1rem;
+  }
+  .answers button:hover:not(:disabled) { background: #eaf1fb; }
+  .answers button.right { background: #dff5e6; border-color: var(--green); }
+  .answers button.right .k { background: var(--green); }
+  .answers button.wrong { background: #fde3e3; border-color: var(--red); }
+  .answers button.wrong .k { background: var(--red); }
+  .answers button:disabled { cursor: default; }
+  .feedback { margin-top: 14px; border-radius: 14px; padding: 10px 14px; font-size: 1.15rem; display: none; }
+  .feedback.show { display: block; }
+  .feedback.good { background: #dff5e6; border: 2px solid var(--green); }
+  .feedback.bad { background: #fff1d6; border: 2px solid var(--gold-dark); }
+  .feedback b { font-size: 1.3rem; }
+
+  /* Certificate */
+  .cert {
+    border: 8px double var(--navy); border-radius: 18px; padding: 18px; text-align: center; background: #fffdf6;
+  }
+  .cert .top { color: var(--navy); font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+  .cert h2 { color: var(--gold-dark); font-size: clamp(1.9rem, 5vw, 2.6rem); margin: 4px 0; }
+  .cert .name { font-size: clamp(2rem, 6vw, 2.8rem); font-weight: 800; color: var(--navy); border-bottom: 3px solid var(--gold); display: inline-block; padding: 0 20px; margin: 4px 0; min-width: 60%; }
+  .stats { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 12px 0 6px; }
+  .stat { background: var(--navy); color: #fff; border-radius: 14px; padding: 6px 14px; min-width: 120px; }
+  .stat .v { font-size: 1.6rem; font-weight: 800; color: var(--gold); line-height: 1.1; }
+  .stat .l { font-size: .9rem; }
+  .missed { text-align: left; margin-top: 14px; background: #fff; border-radius: 14px; padding: 10px 14px; border: 2px solid #e5dcc4; }
+  .missed h3 { margin: 0 0 4px; color: var(--navy); }
+  .missed li { margin: 4px 0; font-size: 1.02rem; }
+  .board { margin-top: 14px; background: #fff; border-radius: 14px; padding: 8px 14px; border: 2px solid #e5dcc4; }
+  .board h3 { margin: 0 0 4px; color: var(--navy); font-size: 1.15rem; }
+  .board ol { margin: 0; padding-left: 26px; }
+  .board li { font-size: 1.02rem; }
+  .board li span { float: right; font-weight: 800; color: var(--navy); }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    body > *:not(#endScreen) { display: none !important; }
+    #endScreen { position: static; background: none; display: block !important; padding: 0; }
+    #endScreen .card { border: none; box-shadow: none; max-height: none; width: 100%; animation: none; }
+    #endScreen .no-print { display: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🐎 Bronco <span>Dash</span></h1>
+    <div class="sub">Mary Bryant Elementary · Mrs. O'Connor's Class</div>
+  </div>
+  <button class="icon-btn" id="muteBtn" aria-label="Turn sound on or off">🔊 Sound on</button>
+</header>
+
+<div id="stage">
+  <canvas id="game" width="960" height="420" aria-label="Bronco Dash game area. Press space or tap to jump."></canvas>
+</div>
+<p class="hint">Jump: <kbd>Space</kbd> or tap the game. Tap twice for a <b>double jump</b>!</p>
+
+<!-- Title screen -->
+<div class="overlay show" id="titleScreen">
+  <div class="card">
+    <div class="title-badge">
+      <div class="big">🐎</div>
+      <div class="school">Mary Bryant Elementary</div>
+      <h2>Bronco <span>Dash</span></h2>
+      <p>Gallop across campus, dodge the backpacks, and answer questions at every school stop!</p>
+    </div>
+
+    <label class="field" for="playerName">What's your name, Bronco?</label>
+    <input type="text" id="playerName" maxlength="18" autocomplete="off" placeholder="Type your first name">
+
+    <div class="field" style="font-weight:800;color:var(--navy);margin-top:14px;font-size:1.1rem">Pick your school stops:</div>
+    <div class="subjects" id="subjectPicker"></div>
+
+    <div class="howto">
+      <b>How to play</b>
+      <ul>
+        <li>Press <b>Space</b> or <b>tap</b> to jump. Jump again in the air for a double jump.</li>
+        <li>Grab golden horseshoes for points. Bumping a backpack costs a heart.</li>
+        <li>At each school stop, answer a question. A right answer earns 100 points <b>and a heart back</b>!</li>
+        <li>Finish all 8 stops to become a <b>Bronco Dash Champion</b>.</li>
+      </ul>
+    </div>
+
+    <p class="error" id="startError"></p>
+    <div class="row" style="margin-top:6px">
+      <button class="btn" id="startBtn">Giddy-up! Start ➜</button>
+    </div>
+    <div class="board" id="titleBoard"></div>
+  </div>
+</div>
+
+<!-- Question screen -->
+<div class="overlay" id="questionScreen">
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="qText">
+    <div class="station" id="qStation">
+      <div class="ico" id="qIcon"></div>
+      <div>
+        <div class="nm" id="qName"></div>
+        <div class="sb" id="qSub"></div>
+      </div>
+      <div class="ct" id="qCount"></div>
+    </div>
+    <div class="question" id="qText"></div>
+    <div class="answers" id="qAnswers"></div>
+    <div class="feedback" id="qFeedback"></div>
+    <div class="row" id="qContinueRow" style="display:none">
+      <button class="btn" id="qContinue">Keep galloping ➜</button>
+    </div>
+  </div>
+</div>
+
+<!-- Paused screen -->
+<div class="overlay" id="pauseScreen">
+  <div class="card" style="text-align:center">
+    <h2>Whoa, Bronco! ⏸️</h2>
+    <p>The game is paused.</p>
+    <div class="row"><button class="btn" id="resumeBtn">Keep going ➜</button></div>
+  </div>
+</div>
+
+<!-- End screen -->
+<div class="overlay" id="endScreen">
+  <div class="card">
+    <div class="cert" id="certificate">
+      <div class="top">⭐ Mary Bryant Elementary ⭐</div>
+      <h2 id="endTitle"></h2>
+      <p id="endLead"></p>
+      <div class="name" id="endName"></div>
+      <p>Mrs. O'Connor's Class · Go Broncos! 🐎</p>
+      <div class="stats">
+        <div class="stat"><div class="v" id="stScore">0</div><div class="l">Points</div></div>
+        <div class="stat"><div class="v" id="stRight">0</div><div class="l">Questions right</div></div>
+        <div class="stat"><div class="v" id="stShoes">0</div><div class="l">Horseshoes</div></div>
+      </div>
+      <p id="endDate" style="font-size:.95rem;color:#555"></p>
+    </div>
+    <div class="missed no-print" id="missedBox"></div>
+    <div class="row no-print">
+      <button class="btn" id="againBtn">Play again ➜</button>
+      <button class="btn navy" id="printBtn">🖨️ Print certificate</button>
+      <button class="btn ghost" id="menuBtn">Main menu</button>
+    </div>
+    <div class="board no-print" id="endBoard"></div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   QUESTIONS
+   Written for 3rd grade (about 9 years old).
+   Each question: q = question, a = right answer,
+   w = wrong answers, tip = a short "did you know".
+   Teachers: add or change questions right here.
+   ========================================================= */
+const QUESTIONS = {
+  reading: [
+    { q: "Which word means almost the same as HAPPY?", a: "joyful", w: ["grumpy", "sleepy", "hungry"], tip: "Words that mean the same thing are called synonyms." },
+    { q: "Which word means the opposite of ANCIENT?", a: "new", w: ["old", "dusty", "giant"], tip: "Words with opposite meanings are called antonyms." },
+    { q: "Which word is a NOUN?", a: "playground", w: ["run", "quickly", "blue"], tip: "A noun is a person, place, or thing." },
+    { q: "Which word is a VERB?", a: "gallop", w: ["horse", "brown", "fence"], tip: "A verb is an action word. Broncos gallop!" },
+    { q: "In the word UNHAPPY, what does the prefix UN- mean?", a: "not", w: ["very", "again", "before"], tip: "Unhappy means not happy. Unkind means not kind." },
+    { q: "What does the prefix RE- mean in the word REREAD?", a: "again", w: ["not", "less", "under"], tip: "Reread means read again. Redo means do again." },
+    { q: "What is the plural of MOUSE?", a: "mice", w: ["mouses", "mousies", "meese"], tip: "Some plurals are irregular: mouse → mice, child → children." },
+    { q: "Which one is a complete sentence?", a: "The bronco ran across the field.", w: ["Across the big field.", "The fast bronco.", "Running and jumping."], tip: "A complete sentence has a subject and a verb." },
+    { q: "Which word is an ADJECTIVE in this sentence: \"The tall teacher smiled.\"", a: "tall", w: ["teacher", "smiled", "the"], tip: "An adjective describes a noun. Tall describes the teacher." },
+    { q: "The SETTING of a story tells us…", a: "where and when it happens", w: ["who the author is", "how the story ends", "the title of the book"], tip: "Setting = place + time." },
+    { q: "Which word is a COMPOUND word?", a: "sunflower", w: ["sunny", "flowers", "planting"], tip: "A compound word is two words stuck together: sun + flower." },
+    { q: "What is the contraction for DO NOT?", a: "don't", w: ["do'nt", "dont", "didn't"], tip: "The apostrophe takes the place of the missing letter O." },
+    { q: "Which word sounds like FLOWER but has a different meaning?", a: "flour", w: ["flow", "floor", "power"], tip: "Words that sound the same but mean different things are homophones." },
+    { q: "Which sentence uses capital letters correctly?", a: "We visited Tampa in June.", w: ["we visited Tampa in june.", "We visited tampa in June.", "We Visited Tampa In June."], tip: "Capitalize the first word, names of places, and months." },
+    { q: "Why would an author write a recipe?", a: "to explain how to do something", w: ["to tell a funny story", "to make you scared", "to rhyme"], tip: "Authors write to inform, to entertain, or to persuade." },
+    { q: "Which word is spelled correctly?", a: "because", w: ["becuase", "becaus", "becose"], tip: "Big Elephants Can Always Understand Small Elephants = BECAUSE!" }
+  ],
+  math: [
+    { q: "6 × 7 = ?", a: "42", w: ["36", "48", "13"], tip: "6 groups of 7 is 42." },
+    { q: "8 × 4 = ?", a: "32", w: ["12", "28", "36"], tip: "Double 4 is 8, double 8 is 16, double 16 is 32!" },
+    { q: "9 × 3 = ?", a: "27", w: ["12", "24", "29"], tip: "Nines trick: the digits in 27 add up to 9 (2 + 7)." },
+    { q: "56 ÷ 8 = ?", a: "7", w: ["6", "8", "9"], tip: "5, 6, 7, 8: 56 = 7 × 8!" },
+    { q: "345 + 278 = ?", a: "623", w: ["513", "613", "633"], tip: "Line up the ones, tens, and hundreds, and remember to regroup." },
+    { q: "502 − 167 = ?", a: "335", w: ["345", "435", "365"], tip: "You can check subtraction by adding: 335 + 167 = 502." },
+    { q: "Round 467 to the nearest hundred.", a: "500", w: ["400", "470", "460"], tip: "Look at the tens digit. 6 is 5 or more, so round up." },
+    { q: "Round 83 to the nearest ten.", a: "80", w: ["90", "85", "100"], tip: "3 is less than 5, so round down to 80." },
+    { q: "What is the value of the 6 in 4,682?", a: "600", w: ["6", "60", "6,000"], tip: "The 6 is in the hundreds place." },
+    { q: "Which fraction is bigger?", a: "3/4", w: ["1/4", "2/4", "They are equal"], tip: "Same-size pieces: 3 pieces is more than 1 or 2." },
+    { q: "What is half of 18?", a: "9", w: ["8", "6", "36"], tip: "Half means 2 equal groups: 9 + 9 = 18." },
+    { q: "A square has sides that are 5 inches long. What is its perimeter?", a: "20 inches", w: ["25 inches", "10 inches", "15 inches"], tip: "Perimeter is the distance around: 5 + 5 + 5 + 5 = 20." },
+    { q: "A rectangle is 4 units wide and 6 units long. What is its area?", a: "24 square units", w: ["10 square units", "20 square units", "46 square units"], tip: "Area = length × width: 4 × 6 = 24." },
+    { q: "Recess starts at 10:15 and lasts 30 minutes. When does it end?", a: "10:45", w: ["10:30", "11:15", "10:35"], tip: "15 minutes + 30 minutes = 45 minutes." },
+    { q: "Junior Achievement money question: 3 quarters and 2 dimes make…", a: "95¢", w: ["85¢", "75¢", "$1.05"], tip: "25 + 25 + 25 = 75, then 10 + 10 = 20. 75 + 20 = 95." },
+    { q: "Bake sale cookies cost $2 each. How much do 4 cookies cost?", a: "$8", w: ["$6", "$4", "$10"], tip: "4 × $2 = $8." },
+    { q: "Which number is EVEN?", a: "34", w: ["27", "41", "13"], tip: "Even numbers end in 0, 2, 4, 6, or 8." },
+    { q: "7 × 0 = ?", a: "0", w: ["7", "70", "1"], tip: "Any number times zero is zero!" },
+    { q: "There are 24 students sitting in 4 equal rows. How many are in each row?", a: "6", w: ["4", "8", "20"], tip: "24 ÷ 4 = 6." }
+  ],
+  science: [
+    { q: "When water freezes, it turns into a…", a: "solid", w: ["liquid", "gas", "rainbow"], tip: "Ice is water in its solid state." },
+    { q: "Steam from a hot pot is water as a…", a: "gas", w: ["solid", "liquid", "rock"], tip: "Water can be a solid, a liquid, or a gas." },
+    { q: "What do plants need from the sky to make their food?", a: "sunlight", w: ["moonlight", "wind", "thunder"], tip: "Plants use sunlight, water, and air to make food." },
+    { q: "What is the closest star to Earth?", a: "the Sun", w: ["the Moon", "the North Star", "Mars"], tip: "The Sun is a star! It is so close it looks huge." },
+    { q: "What is the largest planet in our solar system?", a: "Jupiter", w: ["Earth", "Mars", "Venus"], tip: "More than 1,000 Earths could fit inside Jupiter." },
+    { q: "Why does the Moon shine at night?", a: "It reflects light from the Sun", w: ["It is on fire", "It makes its own light", "It has lightbulbs"], tip: "The Moon is like a giant mirror for sunlight." },
+    { q: "In a butterfly's life cycle, what comes right after the egg?", a: "caterpillar (larva)", w: ["butterfly", "chrysalis", "tadpole"], tip: "Egg → caterpillar → chrysalis → butterfly." },
+    { q: "Which of these will a magnet pick up?", a: "an iron nail", w: ["a wooden pencil", "a plastic cup", "a paper clip made of paper"], tip: "Magnets attract metals like iron and steel." },
+    { q: "Which animal is a MAMMAL?", a: "dolphin", w: ["shark", "alligator", "pelican"], tip: "Dolphins breathe air and feed milk to their babies." },
+    { q: "Florida alligators are which kind of animal?", a: "reptile", w: ["mammal", "amphibian", "fish"], tip: "Reptiles have scales and most lay eggs." },
+    { q: "What do Florida manatees mostly eat?", a: "sea grass and plants", w: ["fish", "crabs", "sharks"], tip: "Manatees are gentle plant-eaters, sometimes called sea cows." },
+    { q: "Hurricanes form over…", a: "warm ocean water", w: ["cold mountains", "dry deserts", "frozen lakes"], tip: "Warm water gives hurricanes their energy." },
+    { q: "What force pulls a ball back down when you throw it up?", a: "gravity", w: ["magnetism", "friction", "wind"], tip: "Gravity pulls everything toward the Earth." },
+    { q: "Which gas do we need to breathe in to live?", a: "oxygen", w: ["smoke", "helium", "steam"], tip: "Trees and plants give off oxygen." },
+    { q: "Which part of a plant soaks up water from the soil?", a: "roots", w: ["petals", "leaves", "seeds"], tip: "Roots work like straws for the plant." },
+    { q: "Earth is the ___ planet from the Sun.", a: "third", w: ["first", "fifth", "tenth"], tip: "Mercury, Venus, Earth: we are number 3!" }
+  ],
+  world: [
+    { q: "How many continents are there?", a: "7", w: ["5", "9", "12"], tip: "Africa, Antarctica, Asia, Australia, Europe, North America, South America." },
+    { q: "What is the largest ocean on Earth?", a: "Pacific Ocean", w: ["Atlantic Ocean", "Indian Ocean", "Arctic Ocean"], tip: "The Pacific is bigger than all the land on Earth put together." },
+    { q: "In which country are the Great Pyramids of Giza?", a: "Egypt", w: ["Mexico", "Italy", "Japan"], tip: "The pyramids are more than 4,000 years old!" },
+    { q: "In which country is the Eiffel Tower?", a: "France", w: ["Spain", "England", "Germany"], tip: "The Eiffel Tower is in Paris, the capital of France." },
+    { q: "Where would you see the Great Wall?", a: "China", w: ["Brazil", "Canada", "Kenya"], tip: "The Great Wall is thousands of miles long." },
+    { q: "Kangaroos hop around in the wild in…", a: "Australia", w: ["Africa", "Europe", "South America"], tip: "Australia is both a country and a continent." },
+    { q: "Which country is right NORTH of the United States?", a: "Canada", w: ["Mexico", "Cuba", "Brazil"], tip: "Mexico is to our south." },
+    { q: "What language do most people speak in Brazil?", a: "Portuguese", w: ["Spanish", "French", "English"], tip: "Brazil is the biggest country in South America." },
+    { q: "Mount Everest, the tallest mountain on Earth, is on which continent?", a: "Asia", w: ["Africa", "Europe", "North America"], tip: "Everest is about 29,000 feet tall!" },
+    { q: "In which direction does the Sun rise?", a: "east", w: ["west", "north", "south"], tip: "The Sun rises in the east and sets in the west." },
+    { q: "On a map, what does the MAP KEY tell you?", a: "what the symbols mean", w: ["who drew the map", "what time it is", "how to unlock the map"], tip: "A map key is also called a legend." },
+    { q: "The EQUATOR is an imaginary line around the…", a: "middle of the Earth", w: ["top of the Earth", "Moon", "Sun"], tip: "Places near the equator are usually warm all year." },
+    { q: "Which continent is the United States on?", a: "North America", w: ["South America", "Europe", "Asia"], tip: "Canada and Mexico are on North America too." },
+    { q: "What is the capital city of Mexico?", a: "Mexico City", w: ["Cancún", "Madrid", "Havana"], tip: "Mexico City is one of the biggest cities in the world." }
+  ],
+  florida: [
+    { q: "What is the capital of Florida?", a: "Tallahassee", w: ["Tampa", "Miami", "Orlando"], tip: "Tallahassee is in the Florida Panhandle." },
+    { q: "What is Florida's nickname?", a: "the Sunshine State", w: ["the Lone Star State", "the Empire State", "the Snowy State"], tip: "Florida gets lots of sunshine all year long!" },
+    { q: "Florida has water on three sides. That kind of land is called a…", a: "peninsula", w: ["island", "mountain", "desert"], tip: "Peninsula comes from Latin words meaning almost an island." },
+    { q: "Which ocean is along Florida's EAST coast?", a: "Atlantic Ocean", w: ["Pacific Ocean", "Indian Ocean", "Arctic Ocean"], tip: "The Atlantic Ocean stretches all the way to Europe and Africa." },
+    { q: "What is Florida's state animal?", a: "Florida panther", w: ["polar bear", "kangaroo", "moose"], tip: "Florida panthers are an endangered big cat." },
+    { q: "What is Florida's state tree?", a: "sabal palm", w: ["oak tree", "maple tree", "pine tree"], tip: "The sabal palm is also called the cabbage palm." },
+    { q: "Which fruit is Florida famous for growing?", a: "oranges", w: ["bananas", "pineapples", "coconuts only"], tip: "Orange juice is Florida's state beverage!" },
+    { q: "Mary Bryant Elementary is in which Florida county?", a: "Hillsborough County", w: ["Orange County", "Miami-Dade County", "Leon County"], tip: "Hillsborough County includes the city of Tampa." },
+    { q: "Which is the oldest city in the United States, founded by Spain in 1565?", a: "St. Augustine, Florida", w: ["New York City", "Los Angeles", "Chicago"], tip: "St. Augustine is on Florida's Atlantic coast." },
+    { q: "On Veterans Day, we honor people who…", a: "served in the military", w: ["won a race", "wrote books", "built schools"], tip: "Veterans Day is November 11 every year." },
+    { q: "Veterans Day is celebrated on…", a: "November 11", w: ["July 4", "December 25", "February 14"], tip: "It began at the end of World War I, on the 11th hour of the 11th day of the 11th month." },
+    { q: "Who was the first President of the United States?", a: "George Washington", w: ["Abraham Lincoln", "Thomas Edison", "Benjamin Franklin"], tip: "Washington became President in 1789." },
+    { q: "How many stars are on the United States flag?", a: "50", w: ["13", "48", "100"], tip: "One star for each state. The 13 stripes stand for the first 13 colonies." },
+    { q: "The leader of a STATE, like Florida, is called the…", a: "governor", w: ["mayor", "principal", "president"], tip: "A city has a mayor. The country has a president." },
+    { q: "What is the name of our school's mascot?", a: "the Broncos", w: ["the Panthers", "the Dolphins", "the Gators"], tip: "Go Broncos! A bronco is a strong, wild horse." }
+  ],
+  caring: [
+    { q: "A new student is sitting alone at lunch. What is a kind thing to do?", a: "Invite them to sit with you", w: ["Ignore them", "Laugh at them", "Take their dessert"], tip: "Being a friend to someone new can make their whole day." },
+    { q: "Someone drops all their books in the hallway. What should you do?", a: "Help pick them up", w: ["Walk past fast", "Kick them away", "Point and laugh"], tip: "Small helpful acts make a big difference." },
+    { q: "Your friend looks sad. What could you do?", a: "Ask if they are okay and listen", w: ["Tell them to stop being sad", "Walk away", "Tell everyone they are sad"], tip: "Listening is one of the best ways to show you care." },
+    { q: "You see someone being bullied. What is the best choice?", a: "Tell a trusted adult", w: ["Join in", "Pretend you didn't see it", "Record it to show friends"], tip: "Teachers and staff want to help keep everyone safe." },
+    { q: "You made a mistake and hurt someone's feelings. What should you do?", a: "Say sorry and try to make it right", w: ["Blame someone else", "Hide", "Say it wasn't a big deal"], tip: "A real apology shows respect and responsibility." },
+    { q: "Your team lost a game at recess. What is good sportsmanship?", a: "Say \"good game\" to the other team", w: ["Yell that it was unfair", "Quit and stomp away", "Refuse to play next time"], tip: "Good sports are kind whether they win or lose." },
+    { q: "What does RESPECT mean?", a: "Treating others the way you want to be treated", w: ["Always getting your way", "Being the loudest", "Only being nice to friends"], tip: "This is often called the Golden Rule." },
+    { q: "It's Staff Appreciation Week! What is a great way to thank a teacher?", a: "Write a thank-you note", w: ["Forget about it", "Talk during their lesson", "Leave trash on their desk"], tip: "A few kind words can brighten someone's day." },
+    { q: "You find a $5 bill on the hallway floor. What is the honest thing to do?", a: "Take it to the front office", w: ["Keep it", "Spend it at the book fair", "Hide it in your desk"], tip: "Honesty means doing the right thing even when no one is watching." },
+    { q: "Which of these shows RESPONSIBILITY?", a: "Turning in homework on time", w: ["Leaving your jacket on the bus", "Forgetting your library book", "Waiting for someone else to clean up"], tip: "Responsibility means doing your part." },
+    { q: "Why is recycling a caring choice?", a: "It helps take care of the Earth", w: ["It makes more trash", "It is only for grown-ups", "It doesn't matter"], tip: "Recycling turns old things into new things and saves resources." },
+    { q: "Grandparents are visiting for breakfast at school. How can you be a good host?", a: "Say hello and show them around", w: ["Ignore them", "Run off with friends", "Eat their food"], tip: "Welcoming guests makes Mary Bryant a friendly place." }
+  ]
+};
+
+const STATIONS = {
+  reading: { name: "Library",              sub: "Battle of the Books",  icon: "📚", color: "#6A44A8" },
+  math:    { name: "Math Lab",             sub: "Junior Achievement",   icon: "🧮", color: "#1E73C8" },
+  science: { name: "Science Lab",          sub: "Experiments & nature", icon: "🔬", color: "#22885A" },
+  world:   { name: "International Night",  sub: "Countries & maps",     icon: "🌎", color: "#D4691A" },
+  florida: { name: "Florida & U.S.",       sub: "Veterans Day & history", icon: "🌴", color: "#1A437E" },
+  caring:  { name: "Week of Caring",       sub: "Kindness & character", icon: "💛", color: "#C23B5A" }
+};
+const SUBJECT_LABELS = {
+  reading: "Reading", math: "Math", science: "Science",
+  world: "Geography", florida: "Florida & History", caring: "Kindness"
+};
+const TOTAL_STOPS = 8;
+
+/* =========================================================
+   SMALL HELPERS
+   ========================================================= */
+const $ = id => document.getElementById(id);
+const rand = (a, b) => a + Math.random() * (b - a);
+const shuffle = arr => { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+};
+
+/* =========================================================
+   SOUND (simple beeps, no files needed)
+   ========================================================= */
+let audioCtx = null;
+let muted = store.get("broncoDash.muted", false);
+function tone(freq, dur = 0.12, type = "square", vol = 0.05, slide = 0, delay = 0) {
+  if (muted) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const t = audioCtx.currentTime + delay;
+    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.linearRampToValueAtTime(freq + slide, t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(audioCtx.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+const sfx = {
+  jump:  () => tone(380, 0.14, "square", 0.04, 260),
+  shoe:  () => { tone(988, 0.07, "square", 0.04); tone(1319, 0.1, "square", 0.04, 0, 0.06); },
+  hit:   () => tone(180, 0.3, "sawtooth", 0.06, -100),
+  right: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.14, "triangle", 0.08, 0, i * 0.09)),
+  wrong: () => tone(330, 0.3, "triangle", 0.07, -140),
+  stop:  () => { tone(660, 0.1, "triangle", 0.07); tone(880, 0.14, "triangle", 0.07, 0, 0.1); },
+  win:   () => [523, 523, 523, 659, 784, 659, 784, 1047].forEach((f, i) => tone(f, 0.16, "triangle", 0.08, 0, i * 0.13))
+};
+function updateMuteBtn() { $("muteBtn").textContent = muted ? "🔇 Sound off" : "🔊 Sound on"; }
+$("muteBtn").addEventListener("click", () => { muted = !muted; store.set("broncoDash.muted", muted); updateMuteBtn(); $("muteBtn").blur(); });
+updateMuteBtn();
+
+/* =========================================================
+   CANVAS SETUP
+   ========================================================= */
+const cv = $("game");
+const ctx = cv.getContext("2d");
+const W = 960, H = 420;
+const HORIZON = 292;       // where grass meets the buildings
+const GROUND = 384;        // where hooves touch the track
+const GRAVITY = 2600;
+const EMOJI_FONT = '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",sans-serif';
+
+function fitCanvas() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+fitCanvas();
+window.addEventListener("resize", fitCanvas);
+
+/* =========================================================
+   GAME STATE
+   ========================================================= */
+let mode = "title";   // title | play | question | paused | end
+let G = null;
+const view = { scroll: 0, t: 0 };
+
+function chosenSubjects() {
+  return Object.keys(STATIONS).filter(k => $("sub_" + k).checked);
+}
+
+function buildStops(subjects) {
+  const start = Math.floor(Math.random() * subjects.length);
+  const stops = [];
+  for (let i = 0; i < TOTAL_STOPS; i++) stops.push(subjects[(start + i) % subjects.length]);
+  return stops;
+}
+
+function newGame(name, subjects) {
+  G = {
+    name, subjects,
+    t: 0, ready: 1.6, dist: 0, speed: 300,
+    score: 0, shoes: 0, hearts: 3, maxHearts: 3, inv: 0,
+    horse: { x: 160, y: GROUND, vy: 0, jumps: 0 },
+    obstacles: [], horseshoes: [], dust: [], floats: [],
+    stops: buildStops(subjects), stopIndex: 0, nextStopAt: 1500,
+    sign: null, finish: null,
+    nextObs: 1.2, nextShoe: 0.6,
+    right: 0, missed: [], used: new Set()
+  };
+}
+
+/* =========================================================
+   INPUT
+   ========================================================= */
+function jump() {
+  if (mode !== "play" || !G) return;
+  const h = G.horse;
+  if (h.jumps < 2) {
+    h.vy = h.jumps === 0 ? -900 : -780;
+    h.jumps++;
+    sfx.jump();
+  }
+}
+window.addEventListener("keydown", e => {
+  if (mode === "play") {
+    if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") { e.preventDefault(); jump(); }
+    if (e.code === "KeyP" || e.code === "Escape") pauseGame();
+  } else if (mode === "question") {
+    const n = parseInt(e.key, 10);
+    const btns = $("qAnswers").querySelectorAll("button");
+    if (n >= 1 && n <= btns.length && !btns[0].disabled) btns[n - 1].click();
+    else if ((e.code === "Enter" || e.code === "Space") && $("qContinueRow").style.display !== "none") { e.preventDefault(); $("qContinue").click(); }
+  } else if (mode === "paused" && (e.code === "Space" || e.code === "Enter" || e.code === "KeyP")) {
+    e.preventDefault(); resumeGame();
+  }
+});
+cv.addEventListener("pointerdown", e => { e.preventDefault(); jump(); });
+
+/* =========================================================
+   UPDATE
+   ========================================================= */
+function update(dt) {
+  view.t += dt;
+  if (mode !== "play") {
+    if (mode === "title" || mode === "end") view.scroll += 140 * dt;
+    return;
+  }
+  const h = G.horse;
+  G.t += dt;
+
+  if (G.ready > 0) { G.ready -= dt; }
+  const sp = G.ready > 0 ? G.speed * 0.6 : G.speed;
+  const dx = sp * dt;
+  view.scroll += dx;
+  G.dist += dx;
+  if (G.inv > 0) G.inv -= dt;
+
+  // Horse physics
+  h.vy += GRAVITY * dt;
+  h.y += h.vy * dt;
+  if (h.y >= GROUND) { h.y = GROUND; h.vy = 0; h.jumps = 0; }
+
+  // Dust behind the hooves
+  if (h.y >= GROUND && Math.random() < 0.5) {
+    G.dust.push({ x: h.x - 30, y: GROUND - 4, vx: -rand(40, 110), vy: -rand(10, 60), life: 0.5, max: 0.5 });
+  }
+
+  // Time for a school stop (or the finish line)?
+  if (!G.sign && !G.finish && G.dist >= G.nextStopAt) {
+    if (G.stopIndex < G.stops.length) G.sign = { x: W + 120, cat: G.stops[G.stopIndex], reached: false };
+    else G.finish = { x: W + 120, reached: false };
+  }
+
+  // Spawn obstacles (not too close to a stop)
+  const roomBeforeStop = G.nextStopAt - G.dist;
+  if (G.ready <= 0) {
+    G.nextObs -= dt;
+    if (G.nextObs <= 0) {
+      if (!G.sign && !G.finish && roomBeforeStop > 520) {
+        const types = [
+          { e: "🎒", s: 46 }, { e: "📚", s: 42 }, { e: "🚧", s: 48 }, { e: "⚽", s: 36 }, { e: "🗑️", s: 46 }
+        ];
+        const tpe = types[Math.floor(Math.random() * types.length)];
+        G.obstacles.push({ x: W + 60, ...tpe });
+        // Every so often, a quick double obstacle (needs good timing!)
+        if (G.stopIndex >= 3 && Math.random() < 0.18) G.obstacles.push({ x: W + 60 + rand(250, 320), ...types[0] });
+      }
+      G.nextObs = rand(1.05, 2.0) * Math.max(0.75, 330 / G.speed);
+    }
+    G.nextShoe -= dt;
+    if (G.nextShoe <= 0) {
+      if (!G.finish) {
+        const lift = rand(70, 150);
+        const n = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < n; i++) {
+          const arc = Math.sin((i / (n - 1)) * Math.PI) * 40;
+          G.horseshoes.push({ x: W + 40 + i * 48, y: GROUND - lift - arc, got: false });
+        }
+      }
+      G.nextShoe = rand(1.6, 3.2);
+    }
+  }
+
+  // Move things
+  for (const o of G.obstacles) o.x -= dx;
+  for (const s of G.horseshoes) s.x -= dx;
+  if (G.sign) G.sign.x -= dx;
+  if (G.finish) G.finish.x -= dx;
+  G.obstacles = G.obstacles.filter(o => o.x > -80);
+  G.horseshoes = G.horseshoes.filter(s => s.x > -40 && !s.got);
+  if (G.sign && G.sign.reached && G.sign.x < -200) G.sign = null;
+
+  // Collisions: horse box
+  const hl = h.x - 28, hr = h.x + 24, ht = h.y - 54, hb = h.y - 6;
+  if (G.inv <= 0) {
+    for (const o of G.obstacles) {
+      if (o.hit) continue;
+      const ol = o.x - o.s * 0.32, or = o.x + o.s * 0.32, ot = GROUND - o.s * 0.75;
+      if (hr > ol && hl < or && hb > ot) {
+        o.hit = true;
+        G.hearts--;
+        G.inv = 1.6;
+        sfx.hit();
+        addFloat(h.x, h.y - 80, "Ouch! −1 ❤️", "#D64545");
+        if (G.hearts <= 0) { endGame(false); return; }
+        break;
+      }
+    }
+  }
+  for (const s of G.horseshoes) {
+    if (!s.got && hr > s.x - 16 && hl < s.x + 16 && hb > s.y - 16 && ht < s.y + 16) {
+      s.got = true; G.shoes++; G.score += 10; sfx.shoe();
+      addFloat(s.x, s.y - 10, "+10", "#C98F0A");
+    }
+  }
+
+  // Reached a school stop?
+  if (G.sign && !G.sign.reached && G.sign.x <= h.x + 10) {
+    G.sign.reached = true;
+    askQuestion(G.sign.cat);
+    return;
+  }
+  // Reached the finish line?
+  if (G.finish && !G.finish.reached && G.finish.x <= h.x) {
+    G.finish.reached = true;
+    G.score += 200 + G.hearts * 50;
+    endGame(true);
+    return;
+  }
+
+  // Particles and floating text
+  for (const d of G.dust) { d.x += d.vx * dt - dx * 0.2; d.y += d.vy * dt; d.life -= dt; }
+  G.dust = G.dust.filter(d => d.life > 0);
+  for (const f of G.floats) { f.y -= 40 * dt; f.life -= dt; }
+  G.floats = G.floats.filter(f => f.life > 0);
+}
+
+function addFloat(x, y, text, color) { G.floats.push({ x, y, text, color, life: 1.1 }); }
+
+/* =========================================================
+   QUESTIONS AT SCHOOL STOPS
+   ========================================================= */
+function pickQuestion(cat) {
+  let pool = QUESTIONS[cat].filter(q => !G.used.has(q.q));
+  if (!pool.length) pool = QUESTIONS[cat];
+  const q = pool[Math.floor(Math.random() * pool.length)];
+  G.used.add(q.q);
+  return q;
+}
+
+function askQuestion(cat) {
+  mode = "question";
+  sfx.stop();
+  const st = STATIONS[cat];
+  const q = pickQuestion(cat);
+  $("qStation").style.background = st.color;
+  $("qIcon").textContent = st.icon;
+  $("qName").textContent = st.name;
+  $("qSub").textContent = st.sub;
+  $("qCount").textContent = `Stop ${G.stopIndex + 1} of ${TOTAL_STOPS}`;
+  $("qText").textContent = q.q;
+  const fb = $("qFeedback");
+  fb.className = "feedback"; fb.innerHTML = "";
+  $("qContinueRow").style.display = "none";
+
+  const box = $("qAnswers");
+  box.innerHTML = "";
+  shuffle([q.a, ...q.w]).forEach((ans, i) => {
+    const b = document.createElement("button");
+    const k = document.createElement("span"); k.className = "k"; k.textContent = i + 1;
+    const t = document.createElement("span"); t.textContent = ans;
+    b.append(k, t);
+    b.dataset.ans = ans;
+    b.addEventListener("click", () => answer(q, ans, cat));
+    box.appendChild(b);
+  });
+  $("questionScreen").classList.add("show");
+  setTimeout(() => box.querySelector("button")?.focus({ preventScroll: true }), 50);
+}
+
+function answer(q, chosen, cat) {
+  const btns = $("qAnswers").querySelectorAll("button");
+  btns.forEach(b => {
+    b.disabled = true;
+    if (b.dataset.ans === q.a) b.classList.add("right");
+    else if (b.dataset.ans === chosen) b.classList.add("wrong");
+  });
+  const fb = $("qFeedback");
+  fb.innerHTML = "";
+  const head = document.createElement("b");
+  const body = document.createElement("div");
+  if (chosen === q.a) {
+    G.right++;
+    G.score += 100;
+    let bonus = "+100 points!";
+    if (G.hearts < G.maxHearts) { G.hearts++; bonus += " And you got a heart back ❤️"; }
+    head.textContent = "✅ Yee-haw! That's right! ";
+    head.append(document.createTextNode(bonus));
+    fb.className = "feedback show good";
+    sfx.right();
+  } else {
+    G.missed.push({ q: q.q, a: q.a, cat });
+    head.textContent = "🤔 Not quite. The answer is: " + q.a;
+    fb.className = "feedback show bad";
+    sfx.wrong();
+  }
+  body.textContent = "💡 " + q.tip;
+  fb.append(head, body);
+  $("qContinueRow").style.display = "flex";
+  $("qContinue").textContent = G.stopIndex + 1 >= TOTAL_STOPS ? "Race to the finish! 🏁" : "Keep galloping ➜";
+  setTimeout(() => $("qContinue").focus({ preventScroll: true }), 50);
+}
+
+$("qContinue").addEventListener("click", () => {
+  $("questionScreen").classList.remove("show");
+  G.stopIndex++;
+  G.nextStopAt = G.dist + 1700;
+  G.speed += 20;
+  G.nextObs = Math.max(G.nextObs, 0.9);
+  mode = "play";
+  cv.focus?.();
+});
+
+/* =========================================================
+   PAUSE
+   ========================================================= */
+function pauseGame() {
+  if (mode !== "play") return;
+  mode = "paused";
+  $("pauseScreen").classList.add("show");
+}
+function resumeGame() {
+  if (mode !== "paused") return;
+  $("pauseScreen").classList.remove("show");
+  mode = "play";
+}
+$("resumeBtn").addEventListener("click", resumeGame);
+document.addEventListener("visibilitychange", () => { if (document.hidden) pauseGame(); });
+
+/* =========================================================
+   START / END
+   ========================================================= */
+function buildSubjectPicker() {
+  const saved = store.get("broncoDash.subjects", Object.keys(STATIONS));
+  const box = $("subjectPicker");
+  for (const k of Object.keys(STATIONS)) {
+    const lab = document.createElement("label");
+    const inp = document.createElement("input");
+    inp.type = "checkbox"; inp.id = "sub_" + k; inp.checked = saved.includes(k);
+    const txt = document.createElement("span");
+    txt.textContent = `${STATIONS[k].icon} ${SUBJECT_LABELS[k]}`;
+    lab.append(inp, txt);
+    box.appendChild(lab);
+  }
+}
+
+function startGame() {
+  const name = $("playerName").value.trim().replace(/\s+/g, " ");
+  const subjects = chosenSubjects();
+  if (!name) { $("startError").textContent = "Please type your name first!"; $("playerName").focus(); return; }
+  if (!subjects.length) { $("startError").textContent = "Pick at least one school stop!"; return; }
+  $("startError").textContent = "";
+  store.set("broncoDash.name", name);
+  store.set("broncoDash.subjects", subjects);
+  newGame(name, subjects);
+  view.scroll = 0;
+  $("titleScreen").classList.remove("show");
+  $("endScreen").classList.remove("show");
+  mode = "play";
+  tone(1, 0.01, "sine", 0.0001); // wake up audio on first click
+}
+
+function endGame(won) {
+  mode = "end";
+  if (won) sfx.win();
+  $("endTitle").textContent = won ? "🏆 Bronco Dash Champion!" : "Great Effort, Bronco!";
+  $("endLead").textContent = won ? "This award goes to" : "Way to keep trying,";
+  $("endName").textContent = G.name;
+  $("stScore").textContent = G.score;
+  $("stRight").textContent = `${G.right} of ${won ? TOTAL_STOPS : G.stopIndex}`;
+  $("stShoes").textContent = G.shoes;
+  $("endDate").textContent = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  $("printBtn").style.display = won ? "" : "none";
+
+  // Questions to review
+  const mb = $("missedBox");
+  mb.innerHTML = "";
+  if (G.missed.length) {
+    const h3 = document.createElement("h3"); h3.textContent = "📖 Let's review";
+    const ul = document.createElement("ul");
+    for (const m of G.missed) {
+      const li = document.createElement("li");
+      const b = document.createElement("b"); b.textContent = m.a;
+      li.append(document.createTextNode(m.q + " → "), b);
+      ul.appendChild(li);
+    }
+    mb.append(h3, ul);
+    mb.style.display = "";
+  } else if (G.right > 0) {
+    mb.innerHTML = "<h3>🌟 Perfect! You got every question right!</h3>";
+    mb.style.display = "";
+  } else {
+    mb.style.display = "none";
+  }
+
+  // High scores on this computer
+  const scores = store.get("broncoDash.scores", []);
+  scores.push({ name: G.name, score: G.score });
+  scores.sort((a, b) => b.score - a.score);
+  store.set("broncoDash.scores", scores.slice(0, 10));
+  renderBoard($("endBoard"));
+  renderBoard($("titleBoard"));
+
+  $("endScreen").classList.add("show");
+}
+
+function renderBoard(el) {
+  const scores = store.get("broncoDash.scores", []).slice(0, 5);
+  el.innerHTML = "";
+  if (!scores.length) { el.style.display = "none"; return; }
+  el.style.display = "";
+  const h3 = document.createElement("h3"); h3.textContent = "🏅 Top Broncos on this computer";
+  const ol = document.createElement("ol");
+  for (const s of scores) {
+    const li = document.createElement("li");
+    const sp = document.createElement("span"); sp.textContent = s.score;
+    li.append(document.createTextNode(s.name), sp);
+    ol.appendChild(li);
+  }
+  el.append(h3, ol);
+}
+
+$("startBtn").addEventListener("click", startGame);
+$("playerName").addEventListener("keydown", e => { if (e.key === "Enter") startGame(); });
+$("againBtn").addEventListener("click", () => {
+  newGame(G.name, G.subjects);
+  view.scroll = 0;
+  $("endScreen").classList.remove("show");
+  mode = "play";
+});
+$("menuBtn").addEventListener("click", () => {
+  $("endScreen").classList.remove("show");
+  $("titleScreen").classList.add("show");
+  mode = "title";
+});
+$("printBtn").addEventListener("click", () => window.print());
+
+/* =========================================================
+   DRAWING
+   ========================================================= */
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function emoji(ch, x, y, size, flip = false) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (flip) ctx.scale(-1, 1);
+  // Emoji take the alpha of the current fill color, so reset it to solid.
+  // (Otherwise a see-through shadow color drawn just before makes them faded.)
+  ctx.fillStyle = "#000";
+  ctx.font = `${size}px ${EMOJI_FONT}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillText(ch, 0, 0);
+  ctx.restore();
+}
+
+function repeatLayer(period, factor, fn) {
+  const off = (view.scroll * factor) % period;
+  for (let x = -off - period; x < W + period; x += period) fn(x);
+}
+
+function drawCloud(x, y, s) {
+  ctx.fillStyle = "rgba(255,255,255,.92)";
+  ctx.beginPath();
+  ctx.arc(x, y, 22 * s, 0, Math.PI * 2);
+  ctx.arc(x + 26 * s, y - 12 * s, 28 * s, 0, Math.PI * 2);
+  ctx.arc(x + 56 * s, y, 22 * s, 0, Math.PI * 2);
+  ctx.rect(x, y - 4 * s, 56 * s, 26 * s);
+  ctx.fill();
+}
+
+function drawSchool(x) {
+  const b = HORIZON;
+  // Left and right wings
+  ctx.fillStyle = "#F3E6CC";
+  ctx.fillRect(x, b - 105, 460, 105);
+  ctx.strokeStyle = "#cdb98f"; ctx.lineWidth = 2;
+  ctx.strokeRect(x, b - 105, 460, 105);
+  // Navy roof band with the school name
+  ctx.fillStyle = "#1A437E";
+  ctx.fillRect(x - 10, b - 124, 480, 22);
+  ctx.fillStyle = "#F2B630";
+  ctx.font = "800 15px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillText("MARY BRYANT", x + 14, b - 113);
+  ctx.textAlign = "right";
+  ctx.fillText("ELEMENTARY", x + 446, b - 113);
+  // Windows
+  ctx.fillStyle = "#8fc7ec";
+  for (let i = 0; i < 4; i++) {
+    ctx.fillRect(x + 18 + i * 38, b - 86, 26, 30);
+    ctx.fillRect(x + 300 + i * 38, b - 86, 26, 30);
+  }
+  ctx.fillStyle = "#ffffff";
+  for (let i = 0; i < 4; i++) {
+    ctx.fillRect(x + 30 + i * 38, b - 86, 2, 30);
+    ctx.fillRect(x + 312 + i * 38, b - 86, 2, 30);
+  }
+  // Center entrance
+  ctx.fillStyle = "#E7D3AE";
+  ctx.fillRect(x + 170, b - 150, 120, 150);
+  ctx.fillStyle = "#1A437E";
+  ctx.beginPath();
+  ctx.moveTo(x + 160, b - 150); ctx.lineTo(x + 230, b - 186); ctx.lineTo(x + 300, b - 150);
+  ctx.closePath(); ctx.fill();
+  // "Home of the Broncos" banner
+  ctx.fillStyle = "#F2B630";
+  roundRect(x + 176, b - 140, 108, 36, 6); ctx.fill();
+  ctx.fillStyle = "#1A437E";
+  ctx.textAlign = "center";
+  ctx.font = "800 11px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.fillText("HOME OF THE", x + 230, b - 129);
+  ctx.font = "800 15px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.fillText("BRONCOS", x + 230, b - 114);
+  // Doors
+  ctx.fillStyle = "#1A437E";
+  ctx.fillRect(x + 200, b - 62, 60, 62);
+  ctx.fillStyle = "#8fc7ec";
+  ctx.fillRect(x + 206, b - 56, 21, 30);
+  ctx.fillRect(x + 233, b - 56, 21, 30);
+  // Flagpole
+  ctx.fillStyle = "#9aa3ad";
+  ctx.fillRect(x + 520, b - 180, 4, 180);
+  const wave = Math.sin(view.t * 4) * 2;
+  ctx.fillStyle = "#ffffff"; ctx.fillRect(x + 524, b - 178 + wave * 0.3, 48, 30);
+  ctx.fillStyle = "#C8102E";
+  for (let i = 0; i < 4; i++) ctx.fillRect(x + 524, b - 178 + i * 8 + wave * 0.3, 48, 4);
+  ctx.fillStyle = "#1A437E"; ctx.fillRect(x + 524, b - 178 + wave * 0.3, 20, 16);
+}
+
+function drawHorseshoe(x, y, spin) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(Math.cos(spin) * 0.35 + 0.75, 1);
+  ctx.strokeStyle = "#F2B630";
+  ctx.lineWidth = 7;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(0, 0, 11, 0.15 * Math.PI, 0.85 * Math.PI, true);
+  ctx.stroke();
+  ctx.strokeStyle = "#C98F0A";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, 11, 0.15 * Math.PI, 0.85 * Math.PI, true);
+  ctx.stroke();
+  ctx.restore();
+  // sparkle
+  if (Math.sin(spin * 2) > 0.92) { ctx.fillStyle = "#fff"; ctx.fillRect(x + 8, y - 14, 3, 3); }
+}
+
+function drawSign(s) {
+  const st = STATIONS[s.cat];
+  const x = s.x;
+  // Post
+  ctx.fillStyle = "#7a5230";
+  ctx.fillRect(x - 5, GROUND - 150, 10, 150);
+  // Board
+  ctx.fillStyle = st.color;
+  ctx.strokeStyle = "#F2B630"; ctx.lineWidth = 5;
+  roundRect(x - 110, GROUND - 210, 220, 70, 14); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = "800 20px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.fillText(st.name, x, GROUND - 186);
+  ctx.font = "600 14px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.fillText(`School Stop ${G.stopIndex + 1}`, x, GROUND - 162);
+  emoji(st.icon, x, GROUND - 210, 38);
+}
+
+function drawFinish(f) {
+  const x = f.x;
+  ctx.fillStyle = "#1A437E";
+  ctx.fillRect(x - 70, GROUND - 190, 10, 190);
+  ctx.fillRect(x + 60, GROUND - 190, 10, 190);
+  // checkered banner
+  const cols = 14, rows = 2, cw = 140 / cols, rh = 14;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    ctx.fillStyle = (r + c) % 2 ? "#1A437E" : "#ffffff";
+    ctx.fillRect(x - 70 + c * cw, GROUND - 230 + r * rh, cw, rh);
+  }
+  ctx.fillStyle = "#F2B630";
+  roundRect(x - 70, GROUND - 202, 140, 30, 6); ctx.fill();
+  ctx.fillStyle = "#1A437E"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = "800 20px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.fillText("FINISH", x, GROUND - 186);
+}
+
+function drawHorse() {
+  const h = G ? G.horse : { x: 160, y: GROUND, vy: 0 };
+  const onGround = h.y >= GROUND - 0.5;
+  const bob = onGround ? Math.abs(Math.sin(view.t * 14)) * -5 : 0;
+  const tilt = onGround ? Math.sin(view.t * 14) * 0.04 : Math.max(-0.25, Math.min(0.25, h.vy / 3600));
+
+  // shadow
+  const lift = Math.max(0, GROUND - h.y);
+  ctx.fillStyle = `rgba(0,0,0,${0.22 - Math.min(lift, 150) / 1000})`;
+  ctx.beginPath();
+  ctx.ellipse(h.x, GROUND + 2, 34 - lift / 10, 7, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // blink while hurt
+  if (G && G.inv > 0 && Math.floor(G.inv * 10) % 2 === 0) return;
+
+  ctx.save();
+  ctx.translate(h.x, h.y + bob + 8);
+  ctx.rotate(tilt);
+  emoji("🐎", 0, 0, 78, true);
+  ctx.restore();
+}
+
+function drawHUD() {
+  // Left panel: hearts, score, horseshoes
+  ctx.fillStyle = "rgba(255,255,255,.88)";
+  roundRect(12, 10, 300, 46, 14); ctx.fill();
+  ctx.fillStyle = "#000";
+  ctx.font = `24px ${EMOJI_FONT}`;
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  for (let i = 0; i < G.maxHearts; i++) ctx.fillText(i < G.hearts ? "❤️" : "🤍", 22 + i * 30, 34);
+  ctx.fillStyle = "#1A437E";
+  ctx.font = "800 22px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.fillText(`${G.score} pts`, 118, 35);
+  drawHorseshoe(228, 34, 0);
+  ctx.fillStyle = "#1A437E";
+  ctx.fillText(`× ${G.shoes}`, 246, 35);
+
+  // Right panel: progress through the school stops
+  const px = W - 342, py = 10, pw = 330;
+  ctx.fillStyle = "rgba(255,255,255,.88)";
+  roundRect(px, py, pw, 46, 14); ctx.fill();
+  ctx.fillStyle = "#1A437E";
+  ctx.font = "800 15px 'Baloo 2', 'Trebuchet MS', sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("Stops", px + 12, py + 24);
+  for (let i = 0; i < TOTAL_STOPS; i++) {
+    const cx = px + 74 + i * 28, cy = py + 23;
+    const done = i < G.stopIndex;
+    const cur = i === G.stopIndex;
+    ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2);
+    ctx.fillStyle = done ? STATIONS[G.stops[i]].color : "#e4e8ef";
+    ctx.fill();
+    if (cur) { ctx.lineWidth = 3; ctx.strokeStyle = "#F2B630"; ctx.stroke(); }
+    if (done) { ctx.fillStyle = "#fff"; ctx.font = "800 12px 'Baloo 2', sans-serif"; ctx.textAlign = "center"; ctx.fillText("✓", cx, cy + 1); ctx.textAlign = "left"; }
+  }
+  ctx.font = `20px ${EMOJI_FONT}`;
+  ctx.fillText("🏁", px + 74 + TOTAL_STOPS * 28 - 8, py + 24);
+
+  // "Get ready" message
+  if (G.ready > 0) {
+    ctx.fillStyle = "rgba(26,67,126,.85)";
+    roundRect(W / 2 - 170, 120, 340, 70, 18); ctx.fill();
+    ctx.fillStyle = "#F2B630"; ctx.textAlign = "center";
+    ctx.font = "800 34px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.fillText(G.ready > 0.7 ? "Ready, Bronco..." : "Giddy-up! 🐎", W / 2, 157);
+  }
+}
+
+function draw() {
+  // Sky
+  const sky = ctx.createLinearGradient(0, 0, 0, HORIZON);
+  sky.addColorStop(0, "#6CC0F0"); sky.addColorStop(1, "#DDF2FF");
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+
+  // Sun
+  ctx.fillStyle = "rgba(242,182,48,.25)";
+  ctx.beginPath(); ctx.arc(860, 80, 54, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#F7C948";
+  ctx.beginPath(); ctx.arc(860, 80, 36, 0, Math.PI * 2); ctx.fill();
+
+  // Clouds
+  repeatLayer(1100, 0.08, x => { drawCloud(x + 80, 70, 1); drawCloud(x + 520, 110, 0.8); drawCloud(x + 860, 55, 0.65); });
+
+  // School and palm trees
+  repeatLayer(1300, 0.35, x => {
+    drawSchool(x + 120);
+    emoji("🌴", x + 30, HORIZON + 6, 96);
+    emoji("🌳", x + 720, HORIZON + 6, 80);
+    emoji("🌴", x + 1000, HORIZON + 6, 110);
+    emoji("🌴", x + 1120, HORIZON + 6, 84);
+  });
+
+  // Grass
+  ctx.fillStyle = "#5DBB63"; ctx.fillRect(0, HORIZON, W, 44);
+  ctx.fillStyle = "#4CA653";
+  repeatLayer(90, 0.7, x => { ctx.fillRect(x + 20, HORIZON + 14, 10, 4); ctx.fillRect(x + 60, HORIZON + 28, 12, 4); });
+
+  // Running track
+  ctx.fillStyle = "#C9653F"; ctx.fillRect(0, HORIZON + 44, W, H - HORIZON - 44);
+  ctx.fillStyle = "rgba(255,255,255,.85)";
+  ctx.fillRect(0, HORIZON + 44, W, 3);
+  ctx.fillRect(0, GROUND + 20, W, 3);
+  repeatLayer(160, 1, x => ctx.fillRect(x, GROUND + 6, 40, 3));
+
+  if (!G || mode === "title") { drawHorse(); return; }
+
+  if (G.finish) drawFinish(G.finish);
+  if (G.sign) drawSign(G.sign);
+
+  // Horseshoes
+  for (const s of G.horseshoes) drawHorseshoe(s.x, s.y + Math.sin(view.t * 4 + s.x * 0.05) * 3, view.t * 4 + s.x * 0.02);
+
+  // Obstacles
+  for (const o of G.obstacles) {
+    ctx.fillStyle = "rgba(0,0,0,.18)";
+    ctx.beginPath(); ctx.ellipse(o.x, GROUND + 2, o.s * 0.42, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = o.hit ? 0.45 : 1;
+    emoji(o.e, o.x, GROUND + 6, o.s);
+    ctx.globalAlpha = 1;
+  }
+
+  // Dust
+  for (const d of G.dust) {
+    ctx.fillStyle = `rgba(230,200,170,${d.life / d.max * 0.8})`;
+    ctx.beginPath(); ctx.arc(d.x, d.y, 4 + (1 - d.life / d.max) * 5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  drawHorse();
+
+  // Floating text
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  for (const f of G.floats) {
+    ctx.globalAlpha = Math.min(1, f.life * 1.5);
+    ctx.font = "800 24px 'Baloo 2', 'Trebuchet MS', sans-serif";
+    ctx.lineWidth = 4; ctx.strokeStyle = "#fff";
+    ctx.strokeText(f.text, f.x, f.y);
+    ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+
+  drawHUD();
+}
+
+/* =========================================================
+   MAIN LOOP
+   ========================================================= */
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+buildSubjectPicker();
+$("playerName").value = store.get("broncoDash.name", "");
+renderBoard($("titleBoard"));
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
